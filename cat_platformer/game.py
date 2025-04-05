@@ -47,7 +47,7 @@ SKY_BLUE = (100, 180, 255)  # Much deeper blue for background
 # Set up the display
 screen = pygame.display.set_mode(SCREEN_SIZE)
 pygame.display.set_caption("Cat Platformer")
-clock = pygame.time.Clock()  # Fixed linter error: proper instantiation
+clock = pygame.time.Clock()  # Create clock instance for time tracking
 
 # Create game directory for assets if it doesn't exist
 if not os.path.exists("assets"):
@@ -69,68 +69,631 @@ class ParallaxBackground:
         self.scroll_positions = [0, 0, 0, 0, 0]  # Initial scroll positions
         self.layers = []  # Will store the background layers
 
-        # Create procedural blue background layers
-        print("Creating procedural blue sky background.")
-        self.create_blue_background_layers()
-
-    def load_background_layers(self):
-        """Load background image layers for the parallax effect."""
-        # List of all the background layers we want to load
-        bg_files = [
-            "parallax-mountain-bg.png",
-            "parallax-mountain-mountain-far.png",
-            "parallax-mountain-mountains.png",
-            "parallax-mountain-trees.png",
-            "parallax-mountain-foreground-trees.png",
+        # Background styles
+        self.background_styles = [
+            self.create_blue_background_layers,  # Default blue background
+            self.create_sunset_background_layers,  # Sunset theme
+            self.create_night_background_layers,  # Night theme
+            self.create_dawn_background_layers,  # Dawn theme
         ]
 
-        self.layers = []
+        self.current_style = 0  # Start with blue background
 
-        # Relative path to the background assets
-        base_path = "assets/backgrounds/mountain_dusk"
+        # Create procedural blue background layers
+        print("Creating procedural blue sky background.")
+        self.background_styles[self.current_style]()
 
-        # Load each layer with error handling for each file
-        for filename in bg_files:
-            try:
-                # Construct the full path
-                file_path = os.path.join(base_path, filename)
+    def cycle_background(self):
+        """Change to the next background style."""
+        self.current_style = (self.current_style + 1) % len(self.background_styles)
+        self.background_styles[self.current_style]()
+        return self.current_style
 
-                # Load the image and scale it to match the game window
-                layer = pygame.image.load(file_path).convert_alpha()
+    def create_sunset_background_layers(self):
+        """Create sunset-themed background layers."""
+        # Layer 1 - Sunset gradient with stars
+        layer1 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
+        for y in range(HEIGHT):
+            # Create a sunset gradient from deep orange to yellow to light blue
+            ratio = y / HEIGHT
+            r = int(220 - ratio * 100)  # Red-orange fading to blue
+            g = int(150 - ratio * 50)  # Medium amount fading down
+            b = int(50 + ratio * 150)  # Blue increases toward bottom
+            pygame.draw.line(layer1, (r, g, b), (0, y), (WIDTH * 2, y))
 
-                # Scale the image to the game dimensions, preserving aspect ratio
-                aspect_ratio = layer.get_width() / layer.get_height()
-                new_height = HEIGHT
-                new_width = int(new_height * aspect_ratio)
+        # Add stars (fewer, since it's sunset)
+        for _ in range(120):  # Half as many stars
+            star_x = random.randint(0, WIDTH * 2)
+            star_y = random.randint(
+                0, int(HEIGHT * 0.4)
+            )  # Stars only in upper 40% of sky
+            star_size = random.randint(1, 2)
+            # Stars with orange tint
+            pygame.draw.circle(
+                layer1,
+                (255, 220, 200),
+                (star_x, star_y),
+                star_size,
+            )
 
-                # If the image is too narrow, scale based on width instead
-                if new_width < WIDTH * 2:
-                    new_width = WIDTH * 2
-                    new_height = int(new_width / aspect_ratio)
+        # Layer 2 - Distant mountains (orange tinted)
+        layer2 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
+        mountain_color = (80, 40, 60)  # Purple-red distant mountains
 
-                # Scale the image
-                layer = pygame.transform.scale(layer, (new_width, new_height))
+        for i in range(10):
+            mountain_width = random.randint(200, 350)
+            mountain_height = random.randint(100, 180)
+            mountain_x = random.randint(0, WIDTH * 2)
 
-                # Add the layer to our list
-                self.layers.append(layer)
-                print(f"Loaded background layer: {filename}")
+            # Draw mountain with sunset coloring
+            pygame.draw.polygon(
+                layer2,
+                mountain_color,
+                [
+                    (mountain_x - mountain_width // 2, GROUND_LEVEL),
+                    (mountain_x, GROUND_LEVEL - mountain_height),
+                    (mountain_x + mountain_width // 2, GROUND_LEVEL),
+                ],
+            )
 
-            except Exception as e:
-                print(f"Error loading background layer {filename}: {e}")
-                # If we fail to load any layer, use our procedural layers instead
-                self.create_blue_background_layers()
-                return
+            # Add highlight to mountain peaks (sunset glow)
+            highlight_color = (150, 70, 60)  # Orange-red highlight
+            pygame.draw.polygon(
+                layer2,
+                highlight_color,
+                [
+                    (
+                        mountain_x - mountain_width // 4,
+                        GROUND_LEVEL - mountain_height // 2,
+                    ),
+                    (mountain_x, GROUND_LEVEL - mountain_height),
+                    (
+                        mountain_x + mountain_width // 4,
+                        GROUND_LEVEL - mountain_height // 2,
+                    ),
+                ],
+            )
 
-        # If we have fewer layers than speeds, adjust the speeds
-        if len(self.layers) < len(self.scroll_speeds):
-            self.scroll_speeds = self.scroll_speeds[: len(self.layers)]
+        # Layer 3 - Middle mountains (warm tints)
+        layer3 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
+        mid_mountain_color = (100, 60, 80)  # Medium purple-red mountains
 
-        # If we have more layers than speeds, add more speeds
-        while len(self.scroll_speeds) < len(self.layers):
-            self.scroll_speeds.append(self.scroll_speeds[-1] * 1.5)
+        for i in range(14):
+            mountain_width = random.randint(150, 300)
+            mountain_height = random.randint(80, 150)
+            mountain_x = random.randint(0, WIDTH * 2)
 
-        # Initialize scroll positions for each layer
-        self.scroll_positions = [0] * len(self.layers)
+            # Draw mountain
+            pygame.draw.polygon(
+                layer3,
+                mid_mountain_color,
+                [
+                    (mountain_x - mountain_width // 2, GROUND_LEVEL),
+                    (mountain_x, GROUND_LEVEL - mountain_height),
+                    (mountain_x + mountain_width // 2, GROUND_LEVEL),
+                ],
+            )
+
+            # Add slight texture to mountains
+            for j in range(3):
+                texture_x = mountain_x + random.randint(
+                    -mountain_width // 3, mountain_width // 3
+                )
+                texture_y = GROUND_LEVEL - random.randint(10, mountain_height - 10)
+                texture_size = random.randint(5, 15)
+                texture_color = (120, 80, 90)  # Slightly lighter warm color
+
+                pygame.draw.circle(
+                    layer3,
+                    texture_color,
+                    (texture_x, texture_y),
+                    texture_size,
+                )
+
+        # Layer 4 - Forest silhouette (dark purple)
+        layer4 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
+        tree_color = (50, 30, 60)  # Dark purple silhouette
+
+        # Draw tree line
+        for i in range(80):
+            tree_x = i * (WIDTH * 2 // 40)
+            tree_height = random.randint(70, 130)
+            tree_width = int(tree_height // 2)
+
+            # Draw pine tree silhouette
+            for j in range(3):
+                size = tree_width - j * 5
+                height = tree_height // 3
+                y_pos = GROUND_LEVEL - height * (j + 1)
+                pygame.draw.polygon(
+                    layer4,
+                    tree_color,
+                    [
+                        (tree_x, y_pos - height),
+                        (tree_x - size // 2, y_pos),
+                        (tree_x + size // 2, y_pos),
+                    ],
+                )
+
+        # Layer 5 - Foreground trees (very dark purple)
+        layer5 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
+        fg_tree_color = (30, 20, 40)  # Very dark purple
+
+        for i in range(30):
+            tree_x = random.randint(0, WIDTH * 2)
+            tree_height = random.randint(120, 200)
+            tree_width = int(tree_height // 1.5)
+
+            # Draw larger foreground pine tree silhouette
+            for j in range(4):
+                size = tree_width - j * 8
+                height = tree_height // 4
+                y_pos = GROUND_LEVEL - height * (j + 1)
+                pygame.draw.polygon(
+                    layer5,
+                    fg_tree_color,
+                    [
+                        (tree_x, y_pos - height),
+                        (tree_x - size // 2, y_pos),
+                        (tree_x + size // 2, y_pos),
+                    ],
+                )
+
+            # Add slight variance to foreground trees
+            branch_color = (40, 25, 50)  # Slightly lighter
+            for _ in range(3):
+                branch_x = tree_x + random.randint(-tree_width // 3, tree_width // 3)
+                branch_y = GROUND_LEVEL - random.randint(20, tree_height - 20)
+                branch_size = random.randint(10, 25)
+
+                pygame.draw.circle(
+                    layer5,
+                    branch_color,
+                    (branch_x, branch_y),
+                    branch_size,
+                )
+
+        # Add sunset haze effect
+        for _ in range(40):
+            mist_x = random.randint(0, WIDTH * 2)
+            mist_y = random.randint(GROUND_LEVEL - 100, GROUND_LEVEL - 10)
+            mist_width = random.randint(100, 300)
+            mist_height = random.randint(20, 60)
+
+            mist_surface = pygame.Surface((mist_width, mist_height), pygame.SRCALPHA)
+            for y in range(mist_height):
+                alpha = 60 - int(abs(y - mist_height // 2) * 100 / mist_height)
+                pygame.draw.line(
+                    mist_surface,
+                    (240, 180, 120, alpha),  # Orange haze
+                    (0, y),
+                    (mist_width, y),
+                )
+
+            layer5.blit(mist_surface, (mist_x, mist_y))
+
+        # Add orange-tinted clouds
+        self._add_clouds_to_layer(
+            layer2, 3, light_color=(200, 150, 120), dark_color=(160, 100, 80)
+        )
+        self._add_clouds_to_layer(
+            layer3, 5, light_color=(230, 180, 150), dark_color=(180, 120, 100)
+        )
+
+        # Add all layers in order of depth
+        self.layers = [layer1, layer2, layer3, layer4, layer5]
+
+    def create_night_background_layers(self):
+        """Create night-themed background layers."""
+        # Layer 1 - Night sky gradient with stars
+        layer1 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
+        for y in range(HEIGHT):
+            # Create a dark blue to black gradient
+            ratio = y / HEIGHT
+            r = int(10 + ratio * 20)  # Very little red
+            g = int(20 + ratio * 30)  # Small amount of green
+            b = int(60 + ratio * 30)  # More blue, fading to darker
+            pygame.draw.line(layer1, (r, g, b), (0, y), (WIDTH * 2, y))
+
+        # Add many bright stars
+        for _ in range(500):  # More stars for night sky
+            star_x = random.randint(0, WIDTH * 2)
+            star_y = random.randint(0, int(HEIGHT * 0.85))  # Stars throughout sky
+
+            # Vary star brightness and size
+            brightness = random.randint(180, 255)
+            star_size = random.random() * 2
+
+            # Occasionally make a larger star with color
+            if random.random() < 0.05:
+                star_size = random.uniform(2, 3)
+                # Random star colors (white, blue-white, yellow)
+                colors = [(255, 255, 255), (200, 220, 255), (255, 240, 180)]
+                color = random.choice(colors)
+            else:
+                color = (brightness, brightness, brightness)
+
+            pygame.draw.circle(
+                layer1,
+                color,
+                (star_x, star_y),
+                star_size,
+            )
+
+        # Add a moon
+        moon_x = random.randint(WIDTH // 4, WIDTH * 2 - WIDTH // 4)
+        moon_y = random.randint(HEIGHT // 6, HEIGHT // 3)
+        moon_radius = random.randint(30, 40)
+
+        # Draw moon glow
+        for r in range(moon_radius + 20, moon_radius - 1, -1):
+            alpha = max(0, 80 - (moon_radius + 20 - r) * 4)
+            pygame.draw.circle(layer1, (200, 200, 180, alpha), (moon_x, moon_y), r)
+
+        # Draw moon
+        pygame.draw.circle(layer1, (230, 230, 210), (moon_x, moon_y), moon_radius)
+
+        # Maybe add a few moon craters
+        for _ in range(3):
+            crater_x = moon_x + random.randint(-moon_radius // 2, moon_radius // 2)
+            crater_y = moon_y + random.randint(-moon_radius // 2, moon_radius // 2)
+
+            # Only draw crater if it's within the moon
+            if (crater_x - moon_x) ** 2 + (crater_y - moon_y) ** 2 < (
+                moon_radius - 5
+            ) ** 2:
+                crater_size = random.randint(4, 8)
+                pygame.draw.circle(
+                    layer1, (200, 200, 180), (crater_x, crater_y), crater_size
+                )
+
+        # Layer 2 - Distant mountains (dark blue)
+        layer2 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
+        mountain_color = (20, 30, 50)  # Very dark blue mountains
+
+        for i in range(10):
+            mountain_width = random.randint(200, 350)
+            mountain_height = random.randint(100, 180)
+            mountain_x = random.randint(0, WIDTH * 2)
+
+            # Draw dark mountains
+            pygame.draw.polygon(
+                layer2,
+                mountain_color,
+                [
+                    (mountain_x - mountain_width // 2, GROUND_LEVEL),
+                    (mountain_x, GROUND_LEVEL - mountain_height),
+                    (mountain_x + mountain_width // 2, GROUND_LEVEL),
+                ],
+            )
+
+            # Add very subtle moonlight highlight
+            highlight_color = (30, 40, 60)  # Slightly lighter blue
+            pygame.draw.polygon(
+                layer2,
+                highlight_color,
+                [
+                    (
+                        mountain_x - mountain_width // 4,
+                        GROUND_LEVEL - mountain_height // 2,
+                    ),
+                    (mountain_x, GROUND_LEVEL - mountain_height),
+                    (
+                        mountain_x + mountain_width // 4,
+                        GROUND_LEVEL - mountain_height // 2,
+                    ),
+                ],
+            )
+
+        # Layer 3 - Middle mountains (slightly lighter blue)
+        layer3 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
+        mid_mountain_color = (25, 35, 60)  # Dark blue middle mountains
+
+        for i in range(14):
+            mountain_width = random.randint(150, 300)
+            mountain_height = random.randint(80, 150)
+            mountain_x = random.randint(0, WIDTH * 2)
+
+            # Draw mountain
+            pygame.draw.polygon(
+                layer3,
+                mid_mountain_color,
+                [
+                    (mountain_x - mountain_width // 2, GROUND_LEVEL),
+                    (mountain_x, GROUND_LEVEL - mountain_height),
+                    (mountain_x + mountain_width // 2, GROUND_LEVEL),
+                ],
+            )
+
+        # Layer 4 - Forest silhouette (nearly black)
+        layer4 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
+        tree_color = (10, 15, 30)  # Very dark blue, almost black
+
+        # Draw tree line
+        for i in range(80):
+            tree_x = i * (WIDTH * 2 // 40)
+            tree_height = random.randint(70, 130)
+            tree_width = int(tree_height // 2)
+
+            # Draw pine tree silhouette
+            for j in range(3):
+                size = tree_width - j * 5
+                height = tree_height // 3
+                y_pos = GROUND_LEVEL - height * (j + 1)
+                pygame.draw.polygon(
+                    layer4,
+                    tree_color,
+                    [
+                        (tree_x, y_pos - height),
+                        (tree_x - size // 2, y_pos),
+                        (tree_x + size // 2, y_pos),
+                    ],
+                )
+
+        # Layer 5 - Foreground trees (black)
+        layer5 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
+        fg_tree_color = (5, 10, 20)  # Almost black
+
+        for i in range(30):
+            tree_x = random.randint(0, WIDTH * 2)
+            tree_height = random.randint(120, 200)
+            tree_width = int(tree_height // 1.5)
+
+            # Draw larger foreground pine tree silhouette
+            for j in range(4):
+                size = tree_width - j * 8
+                height = tree_height // 4
+                y_pos = GROUND_LEVEL - height * (j + 1)
+                pygame.draw.polygon(
+                    layer5,
+                    fg_tree_color,
+                    [
+                        (tree_x, y_pos - height),
+                        (tree_x - size // 2, y_pos),
+                        (tree_x + size // 2, y_pos),
+                    ],
+                )
+
+        # Add very subtle night fog
+        for _ in range(20):
+            mist_x = random.randint(0, WIDTH * 2)
+            mist_y = random.randint(GROUND_LEVEL - 100, GROUND_LEVEL - 10)
+            mist_width = random.randint(100, 300)
+            mist_height = random.randint(20, 60)
+
+            mist_surface = pygame.Surface((mist_width, mist_height), pygame.SRCALPHA)
+            for y in range(mist_height):
+                alpha = 40 - int(abs(y - mist_height // 2) * 80 / mist_height)
+                pygame.draw.line(
+                    mist_surface,
+                    (40, 50, 80, alpha),  # Dark blue-gray fog
+                    (0, y),
+                    (mist_width, y),
+                )
+
+            layer5.blit(mist_surface, (mist_x, mist_y))
+
+        # Add all layers in order of depth
+        self.layers = [layer1, layer2, layer3, layer4, layer5]
+
+    def create_dawn_background_layers(self):
+        """Create dawn/morning-themed background layers."""
+        # Layer 1 - Dawn sky gradient
+        layer1 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
+        for y in range(HEIGHT):
+            # Create a dawn gradient - pink to light blue
+            ratio = y / HEIGHT
+            r = int(200 - ratio * 120)  # Pink fading to blue
+            g = int(160 - ratio * 40)  # Medium fading to blue
+            b = int(180 + ratio * 40)  # Light purple to blue
+            pygame.draw.line(layer1, (r, g, b), (0, y), (WIDTH * 2, y))
+
+        # Add a few stars fading out
+        for _ in range(80):  # Fewer stars at dawn
+            star_x = random.randint(0, WIDTH * 2)
+            star_y = random.randint(0, int(HEIGHT * 0.3))  # Stars only at top
+            star_size = random.randint(1, 2)
+            # Fading stars
+            star_alpha = max(0, 150 - (star_y * 2))
+            pygame.draw.circle(
+                layer1,
+                (255, 255, 255, star_alpha),
+                (star_x, star_y),
+                star_size,
+            )
+
+        # Add a sun/glow
+        sun_x = random.randint(WIDTH // 4, WIDTH // 2)
+        sun_y = random.randint(HEIGHT // 4, HEIGHT // 3)
+
+        # Draw sun glow
+        for r in range(80, 30, -1):
+            alpha = max(0, 120 - (r - 30) * 2)
+            color = (255, 220 - (80 - r) // 2, 150 - (80 - r) // 2, alpha)
+            pygame.draw.circle(layer1, color, (sun_x, sun_y), r)
+
+        # Draw sun
+        pygame.draw.circle(layer1, (255, 220, 150), (sun_x, sun_y), 30)
+
+        # Layer 2 - Distant mountains (pink tinted)
+        layer2 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
+        mountain_color = (90, 70, 100)  # Purple-pink distant mountains
+
+        for i in range(10):
+            mountain_width = random.randint(200, 350)
+            mountain_height = random.randint(100, 180)
+            mountain_x = random.randint(0, WIDTH * 2)
+
+            # Draw mountain with dawn lighting
+            pygame.draw.polygon(
+                layer2,
+                mountain_color,
+                [
+                    (mountain_x - mountain_width // 2, GROUND_LEVEL),
+                    (mountain_x, GROUND_LEVEL - mountain_height),
+                    (mountain_x + mountain_width // 2, GROUND_LEVEL),
+                ],
+            )
+
+            # Add highlight - dawn light on mountain peaks
+            highlight_color = (180, 140, 160)  # Pink highlight
+            pygame.draw.polygon(
+                layer2,
+                highlight_color,
+                [
+                    (
+                        mountain_x - mountain_width // 4,
+                        GROUND_LEVEL - mountain_height // 1.2,
+                    ),
+                    (mountain_x, GROUND_LEVEL - mountain_height),
+                    (
+                        mountain_x + mountain_width // 4,
+                        GROUND_LEVEL - mountain_height // 1.2,
+                    ),
+                ],
+            )
+
+        # Layer 3 - Middle mountains (lavender tints)
+        layer3 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
+        mid_mountain_color = (70, 80, 110)  # Lavender-blue mountains
+
+        for i in range(14):
+            mountain_width = random.randint(150, 300)
+            mountain_height = random.randint(80, 150)
+            mountain_x = random.randint(0, WIDTH * 2)
+
+            # Draw mountain
+            pygame.draw.polygon(
+                layer3,
+                mid_mountain_color,
+                [
+                    (mountain_x - mountain_width // 2, GROUND_LEVEL),
+                    (mountain_x, GROUND_LEVEL - mountain_height),
+                    (mountain_x + mountain_width // 2, GROUND_LEVEL),
+                ],
+            )
+
+        # Layer 4 - Forest silhouette (deep blue-purple)
+        layer4 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
+        tree_color = (50, 50, 80)  # Deep blue-purple silhouette
+
+        # Draw tree line
+        for i in range(80):
+            tree_x = i * (WIDTH * 2 // 40)
+            tree_height = random.randint(70, 130)
+            tree_width = int(tree_height // 2)
+
+            # Draw pine tree silhouette
+            for j in range(3):
+                size = tree_width - j * 5
+                height = tree_height // 3
+                y_pos = GROUND_LEVEL - height * (j + 1)
+                pygame.draw.polygon(
+                    layer4,
+                    tree_color,
+                    [
+                        (tree_x, y_pos - height),
+                        (tree_x - size // 2, y_pos),
+                        (tree_x + size // 2, y_pos),
+                    ],
+                )
+
+        # Layer 5 - Foreground trees (dark blue-purple)
+        layer5 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
+        fg_tree_color = (40, 40, 70)  # Dark blue-purple
+
+        for i in range(30):
+            tree_x = random.randint(0, WIDTH * 2)
+            tree_height = random.randint(120, 200)
+            tree_width = int(tree_height // 1.5)
+
+            # Draw larger foreground pine tree silhouette
+            for j in range(4):
+                size = tree_width - j * 8
+                height = tree_height // 4
+                y_pos = GROUND_LEVEL - height * (j + 1)
+                pygame.draw.polygon(
+                    layer5,
+                    fg_tree_color,
+                    [
+                        (tree_x, y_pos - height),
+                        (tree_x - size // 2, y_pos),
+                        (tree_x + size // 2, y_pos),
+                    ],
+                )
+
+        # Add dawn mist
+        for _ in range(40):
+            mist_x = random.randint(0, WIDTH * 2)
+            mist_y = random.randint(GROUND_LEVEL - 120, GROUND_LEVEL - 10)
+            mist_width = random.randint(100, 300)
+            mist_height = random.randint(20, 70)
+
+            mist_surface = pygame.Surface((mist_width, mist_height), pygame.SRCALPHA)
+            for y in range(mist_height):
+                alpha = 70 - int(abs(y - mist_height // 2) * 120 / mist_height)
+                pygame.draw.line(
+                    mist_surface,
+                    (220, 200, 230, alpha),  # Light pink-white mist
+                    (0, y),
+                    (mist_width, y),
+                )
+
+            layer5.blit(mist_surface, (mist_x, mist_y))
+
+        # Add pink clouds
+        self._add_clouds_to_layer(
+            layer2, 4, light_color=(230, 190, 210), dark_color=(180, 150, 180)
+        )
+        self._add_clouds_to_layer(
+            layer3, 6, light_color=(200, 180, 210), dark_color=(150, 130, 170)
+        )
+
+        # Add all layers in order of depth
+        self.layers = [layer1, layer2, layer3, layer4, layer5]
+
+    def update(self):
+        """Update the positions of the background layers."""
+        for i in range(len(self.layers)):
+            self.scroll_positions[i] -= self.scroll_speeds[i]
+            # Wrap around when needed
+            if self.scroll_positions[i] <= -self.layers[i].get_width():
+                self.scroll_positions[i] = 0
+
+    def draw(self, surface):
+        """Draw the background layers with parallax effect."""
+        for i, layer in enumerate(self.layers):
+            # Draw the layer twice to create seamless scrolling
+            surface.blit(layer, (int(self.scroll_positions[i]), 0))
+            surface.blit(layer, (int(self.scroll_positions[i]) + layer.get_width(), 0))
+
+    def _add_clouds_to_layer(self, layer, cloud_count, light_color, dark_color):
+        """Add clouds to a background layer"""
+        for _ in range(cloud_count):
+            cloud_x = random.randint(0, WIDTH * 2)
+            cloud_y = random.randint(50, GROUND_LEVEL - 250)
+            cloud_width = random.randint(80, 200)
+            cloud_height = random.randint(30, 70)
+
+            # Draw main cloud shape
+            for i in range(3):
+                ellipse_width = random.randint(cloud_width // 2, cloud_width)
+                ellipse_height = random.randint(cloud_height // 2, cloud_height)
+                ellipse_x = cloud_x + random.randint(
+                    -cloud_width // 4, cloud_width // 4
+                )
+                ellipse_y = cloud_y + random.randint(
+                    -cloud_height // 4, cloud_height // 4
+                )
+
+                # Choose between light and dark parts of the cloud
+                cloud_color = light_color if random.random() > 0.4 else dark_color
+
+                pygame.draw.ellipse(
+                    layer,
+                    cloud_color,
+                    (ellipse_x, ellipse_y, ellipse_width, ellipse_height),
+                )
 
     def create_blue_background_layers(self):
         """Create default blue-themed background layers if files aren't found."""
@@ -325,49 +888,6 @@ class ParallaxBackground:
         # Add all layers in order of depth
         self.layers = [layer1, layer2, layer3, layer4, layer5]
 
-    def _add_clouds_to_layer(self, layer, cloud_count, light_color, dark_color):
-        """Add clouds to a background layer"""
-        for _ in range(cloud_count):
-            cloud_x = random.randint(0, WIDTH * 2)
-            cloud_y = random.randint(50, GROUND_LEVEL - 250)
-            cloud_width = random.randint(80, 200)
-            cloud_height = random.randint(30, 70)
-
-            # Draw main cloud shape
-            for i in range(3):
-                ellipse_width = random.randint(cloud_width // 2, cloud_width)
-                ellipse_height = random.randint(cloud_height // 2, cloud_height)
-                ellipse_x = cloud_x + random.randint(
-                    -cloud_width // 4, cloud_width // 4
-                )
-                ellipse_y = cloud_y + random.randint(
-                    -cloud_height // 4, cloud_height // 4
-                )
-
-                # Choose between light and dark parts of the cloud
-                cloud_color = light_color if random.random() > 0.4 else dark_color
-
-                pygame.draw.ellipse(
-                    layer,
-                    cloud_color,
-                    (ellipse_x, ellipse_y, ellipse_width, ellipse_height),
-                )
-
-    def update(self):
-        """Update the positions of the background layers."""
-        for i in range(len(self.layers)):
-            self.scroll_positions[i] -= self.scroll_speeds[i]
-            # Wrap around when needed
-            if self.scroll_positions[i] <= -self.layers[i].get_width():
-                self.scroll_positions[i] = 0
-
-    def draw(self, surface):
-        """Draw the background layers with parallax effect."""
-        for i, layer in enumerate(self.layers):
-            # Draw the layer twice to create seamless scrolling
-            surface.blit(layer, (int(self.scroll_positions[i]), 0))
-            surface.blit(layer, (int(self.scroll_positions[i]) + layer.get_width(), 0))
-
 
 def load_animation_frames(animation_name):
     """Load animation frames from the graphics directory."""
@@ -422,6 +942,7 @@ def load_obstacle_images():
         "cactus": [],
         "bush": [],
         "balloon": None,
+        "glow_balloon": None,  # Add entry for the new balloon
     }
 
     # Create several stone variants
@@ -441,6 +962,9 @@ def load_obstacle_images():
 
     # Create balloon (maybe variants later if needed)
     obstacles["balloon"] = create_pixel_balloon(random_variant=True)
+
+    # Create the glowing balloon
+    obstacles["glow_balloon"] = create_pixel_glow_balloon()
 
     logger.info("Pixel art obstacle graphics generated successfully")
     return obstacles
@@ -748,6 +1272,94 @@ def create_pixel_balloon(random_variant=False):
     return surface
 
 
+def create_pixel_glow_balloon(random_variant=False):
+    """Creates a glowing pixel art balloon power-up."""
+    width, height = 54, 90  # Slightly larger base
+    surface = pygame.Surface((width, height), pygame.SRCALPHA)
+
+    # Gold/Yellow glowing palette
+    base = (255, 200, 0)  # Bright yellow-gold base
+    highlight = (255, 230, 100)  # Lighter highlight
+    shine = (255, 255, 220)  # Near white shine
+    string_color = (200, 200, 200)  # Light gray string
+    glow_color = (255, 220, 50, 100)  # Semi-transparent outer glow
+
+    scale = 6
+    balloon_height = 10  # in pixels
+    balloon_width = 8  # in pixels
+    center_x = width // 2
+
+    # Outer glow (drawn first)
+    glow_radius_x = (balloon_width // 2 + 1) * scale
+    glow_radius_y = (balloon_height // 2 + 1) * scale
+    glow_rect = pygame.Rect(0, 0, glow_radius_x * 2, glow_radius_y * 2)
+    glow_rect.center = (center_x, balloon_height * scale // 2)
+
+    # Create a temporary surface for the glow ellipse
+    temp_glow_surf = pygame.Surface(glow_rect.size, pygame.SRCALPHA)
+    pygame.draw.ellipse(
+        temp_glow_surf, glow_color, (0, 0, glow_rect.width, glow_rect.height)
+    )
+    surface.blit(temp_glow_surf, glow_rect.topleft)
+
+    # Balloon shape (oval)
+    for y in range(balloon_height):
+        dy = abs(y - balloon_height / 2 + 0.5)
+        w = int(balloon_width * math.sqrt(max(0, 1 - (dy / (balloon_height / 2)) ** 2)))
+
+        for x in range(w):
+            px = center_x - (w // 2 * scale) + x * scale
+            py = y * scale
+            rect = pygame.Rect(px, py, scale, scale)
+
+            # Shading
+            color = base
+            if y < balloon_height // 3 or (x < w // 3 and y < balloon_height * 0.7):
+                color = highlight
+
+            pygame.draw.rect(surface, color, rect)
+
+    # Shine spots
+    pygame.draw.rect(surface, shine, (center_x - scale * 1.5, scale, scale, scale))
+    pygame.draw.rect(surface, shine, (center_x - scale * 0.5, scale * 2, scale, scale))
+    pygame.draw.rect(surface, shine, (center_x - scale, scale * 1.5, scale, scale))
+
+    # Add inner yellow glow lines for effect
+    inner_glow_color = (255, 240, 150, 150)
+    pygame.draw.line(
+        surface,
+        inner_glow_color,
+        (center_x - scale, scale * 3),
+        (center_x - scale, scale * (balloon_height - 3)),
+        2,
+    )
+    pygame.draw.line(
+        surface,
+        inner_glow_color,
+        (center_x + scale // 2, scale * 3),
+        (center_x + scale // 2, scale * (balloon_height - 3)),
+        2,
+    )
+
+    # Add balloon knot at bottom
+    knot_y = balloon_height * scale
+    pygame.draw.rect(surface, base, (center_x - scale // 2, knot_y, scale, scale))
+
+    # String
+    string_start_x = center_x - scale // 2
+    string_start_y = (balloon_height + 1) * scale
+    string_end_y = height - scale
+
+    # Draw jagged string line
+    current_x = string_start_x
+    for y in range(string_start_y, string_end_y, scale // 2):
+        pygame.draw.rect(surface, string_color, (current_x, y, 2, scale // 2))
+        current_x += random.randint(-1, 1) * (scale // 3)
+        current_x = max(string_start_x - scale, min(string_start_x + scale, current_x))
+
+    return surface
+
+
 # Global variable to store obstacle images
 OBSTACLE_IMAGES = load_obstacle_images()
 
@@ -903,21 +1515,49 @@ class Cat(pygame.sprite.Sprite):
         self.velocity_y = 0
         self.on_ground = True
         self.is_dead = False
+        self.double_jumps_available = 0  # Counter for double jumps
 
     def jump(self):
-        """Make the cat jump if it's on the ground."""
-        if self.on_ground and not self.is_dead:
-            # Create jump particles at the cat's feet
-            game_instance = Game.get_instance()
+        """Make the cat jump if it's on the ground or has a double jump available."""
+        if self.is_dead:
+            return
+
+        game_instance = Game.get_instance()
+
+        # Standard jump from ground
+        if self.on_ground:
             if game_instance:
                 game_instance.particle_system.add_jump_particles(
                     self.rect.centerx, self.rect.bottom
                 )
+                game_instance.play_sound("jump")  # Play regular jump sound
 
             self.velocity_y = JUMP_FORCE
             self.on_ground = False
             self.current_animation = "jump"
             self.frame_index = 0
+        # Double jump from air
+        elif self.double_jumps_available > 0:
+            self.double_jumps_available -= 1
+            self.velocity_y = JUMP_FORCE * 0.9  # Make double jump slightly weaker
+            self.current_animation = "jump"  # Restart jump animation
+            self.frame_index = 0
+            if game_instance:
+                # Add different particles/sound for double jump
+                game_instance.particle_system.add_particles(
+                    self.rect.centerx,
+                    self.rect.centery,
+                    count=10,
+                    color_range=[
+                        (220, 255),
+                        (180, 230),
+                        (50, 150),
+                    ],  # Yellow/Gold particles
+                    speed_range=[(-1.5, 1.5), (-1, -2.5)],
+                    size_range=(3, 6),
+                    lifetime_range=(15, 30),
+                )
+                game_instance.play_sound("double_jump")  # Play double jump sound
 
     def die(self):
         """Change to death animation when the cat dies."""
@@ -985,6 +1625,44 @@ class Cat(pygame.sprite.Sprite):
         # Update animation regardless of movement status
         self.update_animation()
 
+    def check_collisions(self):
+        """Check if the cat has collided with any obstacles."""
+        if not self.cat.is_dead:
+            for obstacle in self.obstacles:
+                if self.cat.rect.colliderect(obstacle.rect):
+                    # Special handling for balloon - only die if the cat is jumping
+                    if obstacle.obstacle_type == "balloon":
+                        if not self.cat.on_ground:  # Cat is jumping and hit balloon
+                            self.game_over = True
+                            self.cat.die()
+                            self.play_sound("hit")
+                    # Special handling for glowing balloon - gain double jump
+                    elif obstacle.obstacle_type == "glow_balloon":
+                        self.cat.double_jumps_available += 1
+                        # Add visual/audio feedback for power-up
+                        # Define particle properties for clarity
+                        powerup_colors = [  # Bright yellow particles
+                            (255, 255),
+                            (200, 255),
+                            (0, 100),
+                        ]
+                        self.particle_system.add_particles(
+                            x=obstacle.rect.centerx,
+                            y=obstacle.rect.centery,
+                            count=25,
+                            color_range=powerup_colors,
+                            speed_range=[(-2, 2), (-2, 2)],
+                            size_range=(4, 8),
+                            lifetime_range=(40, 70),
+                        )
+                        self.play_sound("powerup")
+                        obstacle.kill()  # Remove the balloon power-up
+                    else:
+                        # For all other obstacles, die on collision
+                        self.game_over = True
+                        self.cat.die()
+                        self.play_sound("hit")
+
 
 # Obstacle class
 class Obstacle(pygame.sprite.Sprite):
@@ -994,10 +1672,16 @@ class Obstacle(pygame.sprite.Sprite):
         super().__init__()
 
         # Choose obstacle type with more naturalistic options
-        obstacle_types = ["stone", "cactus", "bush", "balloon"]
+        obstacle_types = ["stone", "cactus", "bush", "balloon", "glow_balloon"]
 
-        # Adjust probabilities: make balloon rarer (it requires different gameplay)
-        weights = [0.3, 0.3, 0.25, 0.15]  # stone, cactus, bush, balloon
+        # Adjust probabilities: make balloon rarer, glow balloon even rarer
+        weights = [
+            0.3,
+            0.3,
+            0.25,
+            0.10,
+            0.05,
+        ]  # stone, cactus, bush, balloon, glow_balloon
         obstacle_type = random.choices(obstacle_types, weights=weights, k=1)[0]
 
         # Use the appropriate image based on type
@@ -1009,6 +1693,8 @@ class Obstacle(pygame.sprite.Sprite):
             self._setup_bush_obstacle()
         elif obstacle_type == "balloon":
             self._setup_balloon_obstacle()
+        elif obstacle_type == "glow_balloon":
+            self._setup_glow_balloon_obstacle()
         else:
             # Fallback to stone if something goes wrong
             self._setup_stone_obstacle()
@@ -1085,6 +1771,24 @@ class Obstacle(pygame.sprite.Sprite):
         balloon_height = random.randint(80, 140)
         self.rect.bottomleft = (WIDTH, GROUND_LEVEL - balloon_height)
 
+    def _setup_glow_balloon_obstacle(self):
+        """Setup a glowing balloon power-up obstacle."""
+        if "glow_balloon" in OBSTACLE_IMAGES and OBSTACLE_IMAGES["glow_balloon"]:
+            self.image = OBSTACLE_IMAGES["glow_balloon"].copy()
+        else:
+            self.image = create_pixel_glow_balloon()
+
+        # Scale it slightly larger than regular balloons
+        scale_factor = random.uniform(1.1, 1.4)
+        target_width = int(54 * scale_factor)
+        target_height = int(90 * scale_factor)
+        self.image = pygame.transform.scale(self.image, (target_width, target_height))
+
+        self.rect = self.image.get_rect()
+        # Position slightly higher than normal balloons, but still reachable
+        balloon_height = random.randint(100, 160)
+        self.rect.bottomleft = (WIDTH, GROUND_LEVEL - balloon_height)
+
     def update(self):
         """Move the obstacle and check if it's off-screen."""
         self.rect.x -= self.speed
@@ -1098,54 +1802,102 @@ class Cloud(pygame.sprite.Sprite):
 
     def __init__(self):
         super().__init__()
-        self.width = random.randint(80, 150)
-        self.height = random.randint(40, 70)
+        self.width = random.randint(80, 180)  # Slightly wider clouds possible
+        self.height = random.randint(40, 80)  # Slightly taller clouds possible
         self.image = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
 
-        # Draw cloud with smoother, blue-tinted color
         # Create varying shades of blue clouds - some darker, some lighter
+        base_alpha = 180  # Base transparency
         cloud_base_color = random.choice(
             [
-                (150, 170, 230, 200),  # Light blue-purple, semi-transparent
-                (130, 160, 220, 200),  # Mid blue, semi-transparent
-                (170, 200, 255, 200),  # Very light blue, semi-transparent
-                (100, 140, 210, 200),  # Darker blue, semi-transparent
+                (150, 170, 230, base_alpha),  # Light blue-purple
+                (130, 160, 220, base_alpha),  # Mid blue
+                (170, 200, 255, base_alpha),  # Very light blue
+                (100, 140, 210, base_alpha),  # Darker blue
             ]
         )
 
-        # Draw main cloud body
-        pygame.draw.ellipse(
-            self.image,
-            cloud_base_color,
-            (0, self.height // 4, self.width // 1.5, self.height // 1.5),
-        )
-        pygame.draw.ellipse(
-            self.image,
-            cloud_base_color,
-            (self.width // 3, self.height // 6, self.width // 2, self.height // 1.2),
-        )
-        pygame.draw.ellipse(
-            self.image,
-            cloud_base_color,
-            (self.width // 2, self.height // 3, self.width // 2.5, self.height // 1.5),
-        )
-
-        # Soften the edges with small circles and add highlights
-        lighter_color = (
+        # Determine highlight color based on base color
+        highlight_color = (
             min(cloud_base_color[0] + 30, 255),
             min(cloud_base_color[1] + 30, 255),
             min(cloud_base_color[2] + 30, 255),
-            cloud_base_color[3],
+            base_alpha - 20,  # Slightly less transparent highlight
         )
 
-        for _ in range(7):
-            x = random.randint(0, self.width - 20)
-            y = random.randint(5, self.height - 20)
-            radius = random.randint(8, 18)
+        # Create a fluffier cloud shape using multiple overlapping circles
+        num_circles_main = random.randint(4, 7)  # Main large puffs
+        num_circles_detail = random.randint(3, 6)  # Smaller detail puffs
+        center_x = self.width // 2
+        center_y = self.height // 2
 
-            # Use lighter color on the top side of clouds
-            use_color = lighter_color if y < self.height // 2 else cloud_base_color
-            pygame.draw.circle(self.image, use_color, (x, y), radius)
+        # Draw main puffs (larger, form the core shape)
+        for i in range(num_circles_main):
+            # Larger radius for main puffs
+            radius = random.randint(int(self.width * 0.20), int(self.width * 0.45))
+            # Wider horizontal offset, slightly lower vertical offset bias for base
+            offset_x = random.randint(-self.width // 3, self.width // 3)
+            offset_y = random.randint(
+                -self.height // 6, self.height // 4
+            )  # Bias slightly downwards
+
+            circle_x = center_x + offset_x
+            circle_y = center_y + offset_y
+
+            # Color based on vertical position (darker lower down)
+            # Calculate vertical position relative to the cloud height (0=top, 1=bottom)
+            # We use circle_y + radius as the bottom of the current circle for shading
+            effective_y = circle_y + radius
+            bottom_offset = effective_y - (center_y - self.height // 2)
+            vertical_ratio = max(0, min(1, bottom_offset / self.height))
+
+            r_base, g_base, b_base, a_base = cloud_base_color
+            r_high, g_high, b_high, a_high = highlight_color
+
+            # Interpolate between base and highlight based on height
+            mix_ratio = max(0, 1 - vertical_ratio * 1.2)
+            r = int(r_base + (r_high - r_base) * mix_ratio)
+            g = int(g_base + (g_high - g_base) * mix_ratio)
+            b = int(b_base + (b_high - b_base) * mix_ratio)
+            alpha = int(a_base + (a_high - a_base) * mix_ratio)
+
+            # Make bottom part darker explicitly
+            if vertical_ratio > 0.65:
+                r = max(0, r - 25)
+                g = max(0, g - 25)
+                b = max(0, b - 20)
+                alpha = min(255, alpha + 15)
+
+            color = (r, g, b, alpha)
+
+            pygame.draw.circle(
+                self.image,
+                color,
+                (circle_x, circle_y),
+                radius,
+            )
+
+        # Draw smaller detail puffs (add texture)
+        for i in range(num_circles_detail):
+            # Smaller radius for detail
+            radius = random.randint(int(self.width * 0.10), int(self.width * 0.25))
+            # Allow wider offset for detail puffs, slightly biased upwards
+            offset_x = random.randint(-self.width // 2, self.width // 2)
+            offset_y = random.randint(-self.height // 3, self.height // 4)
+
+            circle_x = center_x + offset_x
+            circle_y = center_y + offset_y
+
+            # Use highlight color mostly for detail puffs, slightly more transparent
+            detail_alpha = max(0, highlight_color[3] - 40)
+            color = (*highlight_color[:3], detail_alpha)
+
+            pygame.draw.circle(
+                self.image,
+                color,
+                (circle_x, circle_y),
+                radius,
+            )
 
         self.rect = self.image.get_rect()
         self.rect.x = random.randint(0, WIDTH)
@@ -1438,44 +2190,72 @@ class Game:
             logger.error(f"Error loading sounds: {e}")
             self.sounds_enabled = False
 
+        # Add placeholders for new sounds
+        # Actual loading would look like: self.sounds["powerup"] = pygame.mixer.Sound("path/to/powerup.wav")
+        self.sounds["powerup"] = None
+        self.sounds["double_jump"] = None
+        self.sounds["jump"] = None  # Assume jump sound exists
+        self.sounds["hit"] = None  # Assume hit sound exists
+        self.sounds["point"] = None  # Assume point sound exists
+        self.sounds["bonus"] = None  # Assume bonus sound exists
+
     def play_sound(self, sound_name):
-        """Play a sound effect if sounds are enabled."""
+        """Play a sound effect if sounds are enabled and the sound exists."""
         if self.sounds_enabled and sound_name in self.sounds:
-            try:
-                self.sounds[sound_name].play()
-            except Exception as e:
-                logger.error(f"Error playing sound {sound_name}: {e}")
+            sound = self.sounds[sound_name]
+            if sound:  # Check if the sound object is not None
+                try:
+                    sound.play()
+                except Exception as e:
+                    logger.error(f"Error playing sound {sound_name}: {e}")
+            else:
+                # Optionally log that the sound is missing, but don't raise an error
+                # logger.warning(f"Sound '{sound_name}' not loaded, skipping playback.")
+                pass
 
     def draw_splash_screen(self):
         """Draw the splash screen with title and instructions."""
-        # Title
-        title_text = self.title_font.render("CAT PLATFORMER", True, (70, 30, 20))
+        # Semi-transparent background for better text visibility
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 120))  # Semi-transparent black
+        screen.blit(overlay, (0, 0))
+
+        # Title with shadow for better visibility
+        shadow_offset = 3
+        title_shadow = self.title_font.render(
+            "CAT GAME", True, (20, 20, 20)
+        )  # Updated Title
+        title_shadow_rect = title_shadow.get_rect(
+            center=(WIDTH // 2 + shadow_offset, HEIGHT // 3 + shadow_offset)
+        )
+        screen.blit(title_shadow, title_shadow_rect)
+
+        title_text = self.title_font.render(
+            "CAT GAME", True, (240, 200, 80)
+        )  # Updated Title & Bright gold color
         title_rect = title_text.get_rect(center=(WIDTH // 2, HEIGHT // 3))
         screen.blit(title_text, title_rect)
 
-        # Instructions
+        # Instructions with text boxes for better visibility
         instructions = [
-            "Help the red cat jump over obstacles!",
+            "Help the cat survive the run!",  # Updated description
             "Press SPACE to jump",
-            "Avoid balloons (don't jump)",
+            "Avoid hitting normal balloons while jumping!",  # Updated rule
+            "Jump into GLOWING balloons for a double jump!",  # New rule
             "Press R to restart after game over",
-            "Press any key to start",
+            "Press any key to start your adventure!",  # Improved text
         ]
 
         for i, line in enumerate(instructions):
+            # Text box background
             text = self.font.render(line, True, BLACK)
-            rect = text.get_rect(center=(WIDTH // 2, HEIGHT // 2 + i * 40))
-            screen.blit(text, rect)
+            text_rect = text.get_rect(center=(WIDTH // 2, HEIGHT // 2 + i * 40))
+            bg_rect = text_rect.inflate(20, 10)  # Make bg slightly larger than text
+            pygame.draw.rect(screen, (255, 255, 255, 180), bg_rect, border_radius=5)
+            pygame.draw.rect(screen, (100, 100, 100), bg_rect, width=2, border_radius=5)
 
-        # Display high score
-        if self.high_score > 0:
-            high_score_text = self.font.render(
-                f"High Score: {self.high_score}", True, (100, 50, 150)
-            )
-            high_score_rect = high_score_text.get_rect(
-                center=(WIDTH // 2, HEIGHT // 2 + len(instructions) * 40 + 20)
-            )
-            screen.blit(high_score_text, high_score_rect)
+            # Text
+            screen.blit(text, text_rect)
 
     def update_difficulty(self):
         """Increase game difficulty based on score."""
@@ -1513,6 +2293,27 @@ class Game:
                             self.game_over = True
                             self.cat.die()
                             self.play_sound("hit")
+                    # Special handling for glowing balloon - gain double jump
+                    elif obstacle.obstacle_type == "glow_balloon":
+                        self.cat.double_jumps_available += 1
+                        # Add visual/audio feedback for power-up
+                        # Define particle properties for clarity
+                        powerup_colors = [  # Bright yellow particles
+                            (255, 255),
+                            (200, 255),
+                            (0, 100),
+                        ]
+                        self.particle_system.add_particles(
+                            x=obstacle.rect.centerx,
+                            y=obstacle.rect.centery,
+                            count=25,
+                            color_range=powerup_colors,
+                            speed_range=[(-2, 2), (-2, 2)],
+                            size_range=(4, 8),
+                            lifetime_range=(40, 70),
+                        )
+                        self.play_sound("powerup")
+                        obstacle.kill()  # Remove the balloon power-up
                     else:
                         # For all other obstacles, die on collision
                         self.game_over = True
@@ -1565,7 +2366,23 @@ class Game:
                             }
                         )
 
+                # Update score and check for background change
+                old_score = self.score
                 self.score += score_to_add
+
+                # Check if we crossed a 50-point threshold and change background
+                if old_score // 50 < self.score // 50:
+                    new_style = self.background.cycle_background()
+                    style_name = ["Blue Sky", "Sunset", "Night", "Dawn"][new_style]
+                    self.score_popups.append(
+                        {
+                            "text": f"NEW BACKGROUND: {style_name}!",
+                            "pos": (WIDTH // 2, HEIGHT // 2 - 50),
+                            "color": (50, 200, 200),
+                            "life": 90,  # frames
+                        }
+                    )
+
                 obstacle.already_passed = True
 
                 # Update difficulty whenever score increases
@@ -1596,6 +2413,13 @@ class Game:
         )
         high_score_rect = high_score_text.get_rect(topright=(WIDTH - 10, 10))
         screen.blit(high_score_text, high_score_rect)
+
+        # Double Jumps Available
+        dj_text = self.font.render(
+            f"Double Jumps: {self.cat.double_jumps_available}", True, (255, 165, 0)
+        )  # Orange color
+        dj_rect = dj_text.get_rect(topright=(WIDTH - 10, 40))
+        screen.blit(dj_text, dj_rect)
 
         # Current speed as an indicator of difficulty
         speed_text = self.font.render(f"Speed: {self.current_speed:.1f}", True, BLACK)
