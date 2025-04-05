@@ -1,28 +1,18 @@
-"""Cat platformer game implementation.
-
-This game requires Python 3.12 exactly. If you encounter errors, please check your Python version:
-    python --version
-
-Installation instructions:
-1. Make sure you're using Python 3.12
-2. Install the game with: pip install -e .
-   or with uv: uv pip install -e .
-3. Run the game with: python cat_platformer_game.py
+"""
+Cat Platformer Game Module
+This module contains the game mechanics for the Cat Platformer.
 """
 
-import pygame
-import random
-import sys
 import os
-import glob
-import logging
+import sys
 import math
-from typing import Dict, List, Tuple, Optional, Union, Any
+import random
+import logging
+import pygame
+import glob
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# Setup logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize pygame
@@ -65,109 +55,98 @@ if not os.path.exists("assets"):
 
 
 class ParallaxBackground:
-    """A parallax scrolling background using blue color schemes."""
+    """A class to manage scrolling parallax background for the game."""
 
     def __init__(self):
+        """Initialize the background with multiple parallax layers."""
+        self.scroll_speeds = [
+            0.0,
+            0.1,
+            0.2,
+            0.4,
+            0.7,
+        ]  # Different speeds for each layer
+        self.scroll_positions = [0, 0, 0, 0, 0]  # Initial scroll positions
+        self.layers = []  # Will store the background layers
+
+        # Create procedural blue background layers
+        print("Creating procedural blue sky background.")
+        self.create_blue_background_layers()
+
+    def load_background_layers(self):
+        """Load background image layers for the parallax effect."""
+        # List of all the background layers we want to load
+        bg_files = [
+            "parallax-mountain-bg.png",
+            "parallax-mountain-mountain-far.png",
+            "parallax-mountain-mountains.png",
+            "parallax-mountain-trees.png",
+            "parallax-mountain-foreground-trees.png",
+        ]
+
         self.layers = []
-        self.load_layers()
-        self.positions = [0, 0, 0, 0, 0]  # X positions for each layer
-        self.speeds = [
-            0.1,  # Background (sky)
-            0.2,  # Far mountains
-            0.4,  # Mountains
-            0.7,  # Trees
-            0.9,  # Foreground trees
-        ]  # Different speeds for parallax effect
 
-    def load_layers(self):
-        """Load background layers from the mountain dusk background and apply blue tint."""
-        try:
-            # Path to the mountain dusk background layers
-            layers_path = os.path.join(
-                "graphics",
-                "backgrounds",
-                "new_backgrounds",
-                "mountain_dusk",
-                "parallax_mountain_pack",
-                "layers",
-            )
+        # Relative path to the background assets
+        base_path = "assets/backgrounds/mountain_dusk"
 
-            # Layer files in order from back to front
-            layer_files = [
-                "parallax-mountain-bg.png",  # Sky background
-                "parallax-mountain-montain-far.png",  # Far mountains
-                "parallax-mountain-mountains.png",  # Middle mountains
-                "parallax-mountain-trees.png",  # Trees
-                "parallax-mountain-foreground-trees.png",  # Foreground trees
-            ]
+        # Load each layer with error handling for each file
+        for filename in bg_files:
+            try:
+                # Construct the full path
+                file_path = os.path.join(base_path, filename)
 
-            loaded_any = False
-            for layer_file in layer_files:
-                try:
-                    file_path = os.path.join(layers_path, layer_file)
-                    if os.path.exists(file_path):
-                        # Load the layer
-                        layer = pygame.image.load(file_path).convert_alpha()
+                # Load the image and scale it to match the game window
+                layer = pygame.image.load(file_path).convert_alpha()
 
-                        # Scale to fit screen height while maintaining aspect ratio
-                        scale_factor = HEIGHT / layer.get_height()
-                        new_width = int(
-                            layer.get_width() * scale_factor * 1.5
-                        )  # Make wider for better scrolling
-                        layer = pygame.transform.scale(layer, (new_width, HEIGHT))
+                # Scale the image to the game dimensions, preserving aspect ratio
+                aspect_ratio = layer.get_width() / layer.get_height()
+                new_height = HEIGHT
+                new_width = int(new_height * aspect_ratio)
 
-                        # Create a blue-tinted copy of the layer
-                        layer_copy = layer.copy()
+                # If the image is too narrow, scale based on width instead
+                if new_width < WIDTH * 2:
+                    new_width = WIDTH * 2
+                    new_height = int(new_width / aspect_ratio)
 
-                        # Apply blue tint to all layers
-                        for y in range(layer.get_height()):
-                            for x in range(layer.get_width()):
-                                color = layer.get_at((x, y))
-                                if color.a > 0:  # Only process non-transparent pixels
-                                    # Enhance blue component and reduce red/green
-                                    r = min(int(color.r * 0.7), 255)  # Reduce red
-                                    g = min(
-                                        int(color.g * 0.8), 255
-                                    )  # Slightly reduce green
-                                    b = min(int(color.b * 1.3), 255)  # Enhance blue
-                                    layer_copy.set_at((x, y), (r, g, b, color.a))
+                # Scale the image
+                layer = pygame.transform.scale(layer, (new_width, new_height))
 
-                        self.layers.append(layer_copy)
-                        loaded_any = True
-                        logger.info(
-                            f"Loaded and blue-tinted background layer: {layer_file}"
-                        )
-                    else:
-                        logger.warning(f"Background layer file not found: {file_path}")
-                except pygame.error as e:
-                    logger.error(f"Error loading background layer {layer_file}: {e}")
+                # Add the layer to our list
+                self.layers.append(layer)
+                print(f"Loaded background layer: {filename}")
 
-            if loaded_any:
-                logger.info(f"Loaded {len(self.layers)} blue-tinted background layers")
-            else:
-                logger.warning(
-                    "No background layers loaded, creating default blue background layers"
-                )
+            except Exception as e:
+                print(f"Error loading background layer {filename}: {e}")
+                # If we fail to load any layer, use our procedural layers instead
                 self.create_blue_background_layers()
-        except Exception as e:
-            logger.error(f"Error loading background layers: {e}")
-            self.create_blue_background_layers()
+                return
+
+        # If we have fewer layers than speeds, adjust the speeds
+        if len(self.layers) < len(self.scroll_speeds):
+            self.scroll_speeds = self.scroll_speeds[: len(self.layers)]
+
+        # If we have more layers than speeds, add more speeds
+        while len(self.scroll_speeds) < len(self.layers):
+            self.scroll_speeds.append(self.scroll_speeds[-1] * 1.5)
+
+        # Initialize scroll positions for each layer
+        self.scroll_positions = [0] * len(self.layers)
 
     def create_blue_background_layers(self):
         """Create default blue-themed background layers if files aren't found."""
-        # Layer 1 - Deep blue sky gradient
-        layer1 = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        # Layer 1 - Deep blue sky gradient with stars
+        layer1 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
         for y in range(HEIGHT):
             # Create a blue gradient from deep blue to lighter blue
             ratio = y / HEIGHT
             r = int(30 + ratio * 60)  # Small amount of red - darker at top
             g = int(80 + ratio * 100)  # Medium amount of green - darker at top
             b = int(180 - ratio * 60)  # Lots of blue - lighter at top
-            pygame.draw.line(layer1, (r, g, b), (0, y), (WIDTH, y))
+            pygame.draw.line(layer1, (r, g, b), (0, y), (WIDTH * 2, y))
 
         # Add stars/small white dots to the sky
-        for _ in range(120):
-            star_x = random.randint(0, WIDTH)
+        for _ in range(240):  # Double the stars for wider background
+            star_x = random.randint(0, WIDTH * 2)
             star_y = random.randint(0, int(HEIGHT * 0.7))  # Stars in upper 70% of sky
             star_size = random.randint(1, 3)
             # Bluish white stars
@@ -179,15 +158,15 @@ class ParallaxBackground:
             )
 
         # Layer 2 - Distant mountains (dark blue)
-        layer2 = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        layer2 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
         mountain_color = (40, 60, 120)  # Dark blue distant mountains
 
-        for i in range(5):  # Draw 5 mountains
+        for i in range(10):  # Draw more mountains for wider layer
             mountain_width = random.randint(200, 350)
             mountain_height = random.randint(100, 180)
-            mountain_x = random.randint(0, WIDTH)
+            mountain_x = random.randint(0, WIDTH * 2)
 
-            # Draw mountain
+            # Draw mountain with slight texture
             pygame.draw.polygon(
                 layer2,
                 mountain_color,
@@ -198,14 +177,32 @@ class ParallaxBackground:
                 ],
             )
 
+            # Add slight highlights to mountain peaks
+            highlight_color = (50, 70, 140)  # Slightly lighter blue
+            pygame.draw.polygon(
+                layer2,
+                highlight_color,
+                [
+                    (
+                        mountain_x - mountain_width // 4,
+                        GROUND_LEVEL - mountain_height // 2,
+                    ),
+                    (mountain_x, GROUND_LEVEL - mountain_height),
+                    (
+                        mountain_x + mountain_width // 4,
+                        GROUND_LEVEL - mountain_height // 2,
+                    ),
+                ],
+            )
+
         # Layer 3 - Middle mountains (medium blue)
-        layer3 = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        layer3 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
         mid_mountain_color = (50, 80, 150)  # Medium blue mountains
 
-        for i in range(7):  # Draw several mountains
+        for i in range(14):  # Draw more mountains for wider layer
             mountain_width = random.randint(150, 300)
             mountain_height = random.randint(80, 150)
-            mountain_x = random.randint(0, WIDTH)
+            mountain_x = random.randint(0, WIDTH * 2)
 
             # Draw mountain
             pygame.draw.polygon(
@@ -218,15 +215,31 @@ class ParallaxBackground:
                 ],
             )
 
+            # Add slight texture to mountains
+            for j in range(3):
+                texture_x = mountain_x + random.randint(
+                    -mountain_width // 3, mountain_width // 3
+                )
+                texture_y = GROUND_LEVEL - random.randint(10, mountain_height - 10)
+                texture_size = random.randint(5, 15)
+                texture_color = (55, 85, 160)  # Slightly lighter blue
+
+                pygame.draw.circle(
+                    layer3,
+                    texture_color,
+                    (texture_x, texture_y),
+                    texture_size,
+                )
+
         # Layer 4 - Forest silhouette (navy blue)
-        layer4 = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        layer4 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
         tree_color = (20, 40, 100)  # Navy blue silhouette
 
         # Draw tree line
-        for i in range(40):  # Draw many trees
-            tree_x = i * (WIDTH // 20)
+        for i in range(80):  # Draw more trees for wider layer
+            tree_x = i * (WIDTH * 2 // 40)
             tree_height = random.randint(70, 130)
-            tree_width = tree_height // 2
+            tree_width = int(tree_height // 2)  # Convert to int explicitly
 
             # Draw pine tree silhouette
             for j in range(3):
@@ -244,13 +257,13 @@ class ParallaxBackground:
                 )
 
         # Layer 5 - Foreground trees (dark navy)
-        layer5 = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        layer5 = pygame.Surface((WIDTH * 2, HEIGHT), pygame.SRCALPHA)
         fg_tree_color = (10, 20, 60)  # Dark navy blue
 
-        for i in range(15):
-            tree_x = random.randint(0, WIDTH)
+        for i in range(30):  # Draw more trees for wider layer
+            tree_x = random.randint(0, WIDTH * 2)
             tree_height = random.randint(120, 200)
-            tree_width = tree_height // 1.5
+            tree_width = int(tree_height // 1.5)  # Convert to int explicitly
 
             # Draw larger foreground pine tree silhouette
             for j in range(4):
@@ -267,23 +280,93 @@ class ParallaxBackground:
                     ],
                 )
 
+            # Add slight variance to foreground trees
+            branch_color = (15, 25, 70)  # Slightly lighter
+            for _ in range(3):
+                branch_x = tree_x + random.randint(-tree_width // 3, tree_width // 3)
+                branch_y = GROUND_LEVEL - random.randint(20, tree_height - 20)
+                branch_size = random.randint(10, 25)
+
+                # Draw small branch
+                pygame.draw.circle(
+                    layer5,
+                    branch_color,
+                    (branch_x, branch_y),
+                    branch_size,
+                )
+
+        # Add some misty effect in the foreground
+        for _ in range(60):
+            mist_x = random.randint(0, WIDTH * 2)
+            mist_y = random.randint(GROUND_LEVEL - 100, GROUND_LEVEL - 10)
+            mist_width = random.randint(100, 300)
+            mist_height = random.randint(20, 60)
+
+            mist_surface = pygame.Surface((mist_width, mist_height), pygame.SRCALPHA)
+            for y in range(mist_height):
+                alpha = 80 - int(abs(y - mist_height // 2) * 120 / mist_height)
+                pygame.draw.line(
+                    mist_surface,
+                    (180, 200, 255, alpha),
+                    (0, y),
+                    (mist_width, y),
+                )
+
+            layer5.blit(mist_surface, (mist_x, mist_y))
+
+        # Add clouds to layers 2 and 3
+        self._add_clouds_to_layer(
+            layer2, 5, light_color=(70, 90, 160), dark_color=(40, 60, 140)
+        )
+        self._add_clouds_to_layer(
+            layer3, 7, light_color=(80, 100, 180), dark_color=(50, 70, 160)
+        )
+
         # Add all layers in order of depth
         self.layers = [layer1, layer2, layer3, layer4, layer5]
+
+    def _add_clouds_to_layer(self, layer, cloud_count, light_color, dark_color):
+        """Add clouds to a background layer"""
+        for _ in range(cloud_count):
+            cloud_x = random.randint(0, WIDTH * 2)
+            cloud_y = random.randint(50, GROUND_LEVEL - 250)
+            cloud_width = random.randint(80, 200)
+            cloud_height = random.randint(30, 70)
+
+            # Draw main cloud shape
+            for i in range(3):
+                ellipse_width = random.randint(cloud_width // 2, cloud_width)
+                ellipse_height = random.randint(cloud_height // 2, cloud_height)
+                ellipse_x = cloud_x + random.randint(
+                    -cloud_width // 4, cloud_width // 4
+                )
+                ellipse_y = cloud_y + random.randint(
+                    -cloud_height // 4, cloud_height // 4
+                )
+
+                # Choose between light and dark parts of the cloud
+                cloud_color = light_color if random.random() > 0.4 else dark_color
+
+                pygame.draw.ellipse(
+                    layer,
+                    cloud_color,
+                    (ellipse_x, ellipse_y, ellipse_width, ellipse_height),
+                )
 
     def update(self):
         """Update the positions of the background layers."""
         for i in range(len(self.layers)):
-            self.positions[i] -= self.speeds[i]
+            self.scroll_positions[i] -= self.scroll_speeds[i]
             # Wrap around when needed
-            if self.positions[i] <= -self.layers[i].get_width():
-                self.positions[i] = 0
+            if self.scroll_positions[i] <= -self.layers[i].get_width():
+                self.scroll_positions[i] = 0
 
     def draw(self, surface):
         """Draw the background layers with parallax effect."""
         for i, layer in enumerate(self.layers):
             # Draw the layer twice to create seamless scrolling
-            surface.blit(layer, (int(self.positions[i]), 0))
-            surface.blit(layer, (int(self.positions[i]) + layer.get_width(), 0))
+            surface.blit(layer, (int(self.scroll_positions[i]), 0))
+            surface.blit(layer, (int(self.scroll_positions[i]) + layer.get_width(), 0))
 
 
 def load_animation_frames(animation_name):
@@ -1081,146 +1164,148 @@ class Cloud(pygame.sprite.Sprite):
 
 
 class Ground:
-    """A scrolling ground with blue-themed colors."""
+    """Ground platform for the game - green grass terrain."""
 
     def __init__(self):
-        self.position = 0
-        self.speed = 5  # Base speed for ground scrolling
+        """Initialize the ground."""
+        self.surface = pygame.Surface((WIDTH, HEIGHT - GROUND_LEVEL))
+        self.rect = self.surface.get_rect(topleft=(0, GROUND_LEVEL))
+        self.color_seed = random.randint(0, 1000)  # Seed for consistent random colors
 
-        # Create a textured ground surface
-        self.width = WIDTH * 2  # Make it wider for smooth scrolling
-        self.height = HEIGHT - GROUND_LEVEL + 10  # Add a bit of overlap
+        # Define color ranges for ground (green tones)
+        self.dark_grass = (25, 80, 20)  # Dark green for shadows
+        self.main_grass = (40, 120, 30)  # Main green color
+        self.light_grass = (65, 150, 45)  # Light green for highlights
+        self.dirt_color = (101, 67, 33)  # Brown dirt color
 
-        # Create the base ground surface
-        self.surface = pygame.Surface((self.width, self.height))
+        # Generate the ground with base colors and texture
+        self._generate_ground()
 
-        # Fill with blue-themed base color
-        self.surface.fill((60, 100, 140))  # Cool blue base
+    def _generate_ground(self):
+        """Generate the ground with grass and dirt layers."""
+        # Fill the ground with dirt color
+        self.surface.fill(self.dirt_color)
 
-        # Create a darker top soil layer
-        pygame.draw.rect(
-            self.surface,
-            (45, 80, 120),  # Darker blue soil
-            (0, 0, self.width, 15),
-        )
+        # Create a grass layer on top
+        grass_height = 15
+        grass_rect = pygame.Rect(0, 0, WIDTH, grass_height)
+        pygame.draw.rect(self.surface, self.main_grass, grass_rect)
 
-        # Add natural texture with varied blue tones
-        for _ in range(200):
-            # Soil variations
-            spot_x = random.randint(0, self.width)
-            spot_y = random.randint(5, self.height)
-            spot_size = random.randint(3, 12)
+        # Add texture to the grass (small random vertical lines for grass blades)
+        for x in range(0, WIDTH, 2):
+            random.seed(self.color_seed + x)  # Use seed for consistent randomness
 
-            # Randomly choose between dark and light blue patches
-            if random.random() < 0.6:
-                # Darker blue patches
-                color = (
-                    random.randint(35, 50),  # R
-                    random.randint(60, 90),  # G
-                    random.randint(100, 130),  # B
-                )
+            # Random grass blade height
+            height = random.randint(2, 8)
+            # Randomly choose grass color (dark, main, or light)
+            color_choice = random.random()
+            if color_choice < 0.2:
+                color = self.dark_grass
+            elif color_choice < 0.7:
+                color = self.main_grass
             else:
-                # Lighter blue patches
-                color = (
-                    random.randint(70, 100),  # R
-                    random.randint(110, 140),  # G
-                    random.randint(160, 190),  # B
-                )
+                color = self.light_grass
 
-            pygame.draw.circle(self.surface, color, (spot_x, spot_y), spot_size)
+            # Draw grass blade
+            pygame.draw.line(self.surface, color, (x, 0), (x, height), 1)
 
-        # Add small rocks scattered throughout - blue-gray tones
+        # Add some random patches of lighter/darker grass
         for _ in range(40):
-            rock_size = random.randint(2, 6)
-            rock_x = random.randint(0, self.width)
-            rock_y = random.randint(10, self.height - 10)
-            rock_color = (
-                random.randint(70, 90),
-                random.randint(90, 120),
-                random.randint(130, 160),
-            )  # Blue-gray variations
+            random.seed(self.color_seed + _ * 10)  # Consistent randomness
+            patch_x = random.randint(0, WIDTH - 30)
+            patch_y = random.randint(0, 10)
+            patch_width = random.randint(20, 50)
+            patch_height = random.randint(3, 8)
+
+            # Randomly choose patch color
+            if random.random() < 0.5:
+                patch_color = self.light_grass
+            else:
+                patch_color = self.dark_grass
+
+            pygame.draw.ellipse(
+                self.surface, patch_color, (patch_x, patch_y, patch_width, patch_height)
+            )
+
+        # Add dirt texture - small dots and variations
+        for _ in range(300):
+            random.seed(self.color_seed + _ * 5)  # Consistent randomness
+            dirt_x = random.randint(0, WIDTH - 1)
+            dirt_y = random.randint(grass_height, self.surface.get_height() - 1)
+
+            # Random dirt color variation
+            color_var = random.randint(-15, 15)
+            dirt_color = (
+                max(0, min(255, self.dirt_color[0] + color_var)),
+                max(0, min(255, self.dirt_color[1] + color_var // 2)),
+                max(0, min(255, self.dirt_color[2] + color_var // 2)),
+            )
+
+            # Draw dirt particle
+            size = random.randint(1, 4)
+            pygame.draw.circle(self.surface, dirt_color, (dirt_x, dirt_y), size)
+
+        # Add some small rocks in the dirt
+        for _ in range(20):
+            random.seed(self.color_seed + _ * 25)  # Consistent randomness
+            rock_x = random.randint(0, WIDTH - 10)
+            rock_y = random.randint(grass_height + 5, self.surface.get_height() - 10)
+            rock_size = random.randint(2, 5)
+
+            # Grey rock color with slight variation
+            grey_var = random.randint(-20, 20)
+            rock_color = (120 + grey_var, 120 + grey_var, 120 + grey_var)
+
             pygame.draw.circle(self.surface, rock_color, (rock_x, rock_y), rock_size)
 
-        # Add blue-toned vegetation along the top
-        for _ in range(150):
-            grass_x = random.randint(0, self.width)
-            grass_height = random.randint(5, 12)
-            grass_width = random.randint(1, 3)
+        # Add some roots/cracks in the dirt
+        for _ in range(10):
+            random.seed(self.color_seed + _ * 50)  # Consistent randomness
+            start_x = random.randint(0, WIDTH)
+            start_y = grass_height + random.randint(5, 10)
 
-            # Blue-tinted vegetation colors
-            grass_color = (
-                random.randint(20, 40),
-                random.randint(70, 100),
-                random.randint(130, 170),
+            # Darker dirt color for roots
+            root_color = (
+                max(0, self.dirt_color[0] - 20),
+                max(0, self.dirt_color[1] - 15),
+                max(0, self.dirt_color[2] - 15),
             )
 
-            # Draw individual vegetation strands
-            if random.random() < 0.7:
-                # Straight strands
-                pygame.draw.line(
-                    self.surface,
-                    grass_color,
-                    (grass_x, 0),
-                    (grass_x, grass_height),
-                    grass_width,
-                )
-            else:
-                # Curved strands
-                pygame.draw.arc(
-                    self.surface,
-                    grass_color,
-                    (grass_x - 5, -5, 10, 20),
-                    0,
-                    3.14,
-                    grass_width,
-                )
+            # Create a branching pattern
+            self._draw_root(self.surface, start_x, start_y, 90, 15, 3, root_color)
 
-        # Add occasional small flowers/crystals in blue tones
-        for _ in range(20):
-            flower_x = random.randint(0, self.width)
-            flower_y = random.randint(3, 8)
+    def _draw_root(self, surface, x, y, angle, length, depth, color):
+        """Recursively draw a root/crack pattern in the dirt."""
+        if depth <= 0 or length < 3:
+            return
 
-            # Choose random blue-themed crystal colors
-            flower_colors = [
-                (150, 200, 255),  # Light blue
-                (100, 150, 255),  # Medium blue
-                (70, 100, 220),  # Darker blue
-                (200, 220, 255),  # White-blue
-            ]
-            flower_color = random.choice(flower_colors)
+        # Calculate endpoint
+        end_x = x + int(math.cos(math.radians(angle)) * length)
+        end_y = y + int(math.sin(math.radians(angle)) * length)
 
-            # Draw tiny crystal/flower shape
-            pygame.draw.circle(self.surface, flower_color, (flower_x, flower_y), 2)
-            pygame.draw.circle(
-                self.surface, flower_color, (flower_x - 2, flower_y + 1), 1
-            )
-            pygame.draw.circle(
-                self.surface, flower_color, (flower_x + 2, flower_y + 1), 1
-            )
-            pygame.draw.circle(self.surface, flower_color, (flower_x, flower_y + 3), 1)
-            # Crystal stem
-            pygame.draw.line(
-                self.surface,
-                (40, 80, 160),
-                (flower_x, flower_y + 3),
-                (flower_x, flower_y + 7),
-                1,
-            )
+        # Draw the line
+        pygame.draw.line(surface, color, (x, y), (end_x, end_y), 1)
 
-        # Define top edge more clearly
-        pygame.draw.line(self.surface, (30, 60, 100), (0, 0), (self.width, 0), 2)
+        # Create branches with some randomness
+        random.seed(self.color_seed + x + y + angle)  # Consistent randomness
 
-    def update(self, speed_factor=1.0):
-        """Update ground position based on game speed."""
-        self.position -= self.speed * speed_factor
-        if self.position <= -self.width // 2:
-            self.position = 0
+        # Left branch
+        new_angle = angle - random.randint(20, 40)
+        new_length = length * 0.7
+        self._draw_root(surface, end_x, end_y, new_angle, new_length, depth - 1, color)
 
-    def draw(self, surface):
-        """Draw the scrolling ground."""
-        # Draw ground at current position and repeated for seamless scrolling
-        surface.blit(self.surface, (int(self.position), GROUND_LEVEL))
-        surface.blit(self.surface, (int(self.position + self.width // 2), GROUND_LEVEL))
+        # Right branch
+        new_angle = angle + random.randint(20, 40)
+        new_length = length * 0.7
+        self._draw_root(surface, end_x, end_y, new_angle, new_length, depth - 1, color)
+
+    def update(self):
+        """Update the ground (currently static, but could be animated)."""
+        pass
+
+    def draw(self, screen):
+        """Draw the ground on the screen."""
+        screen.blit(self.surface, self.rect)
 
 
 class LightingEffect:
@@ -1526,13 +1611,15 @@ class Game:
 
         # Draw score popups
         for popup in self.score_popups:
-            # Fade out near the end of life
-            alpha = (
-                min(255, int(255 * popup["life"] / 20)) if popup["life"] < 20 else 255
-            )
+            # Determine color with proper fade out
             color = popup["color"]
+            if popup["life"] < 20:
+                # Apply fading by creating a color with adjusted alpha
+                popup_text = self.font.render(popup["text"], True, color)
+                # No need to change alpha since we're not using a surface with per-pixel alpha
+            else:
+                popup_text = self.font.render(popup["text"], True, color)
 
-            popup_text = self.font.render(popup["text"], True, color)
             popup_rect = popup_text.get_rect(center=popup["pos"])
             screen.blit(popup_text, popup_rect)
 
@@ -1610,8 +1697,7 @@ class Game:
                 self.background.update()
 
                 # Update ground with current speed factor
-                speed_factor = self.current_speed / OBSTACLE_SPEED
-                self.ground.update(speed_factor)
+                self.ground.update()
 
                 # Check for collisions
                 self.check_collisions()
