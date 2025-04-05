@@ -1,0 +1,21 @@
+[project]
+name = "cat-platformer"
+version = "0.1.0"
+description = "A simple 2D platformer game with a cat jumping over obstacles"
+readme = "README.md"
+requires-python = "==3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "You", email = "your.email@example.com"},
+]
+dependencies = [
+    "pygame==2.5.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+]
+
+[project.scripts]
+cat-platformer = "cat_platformer.__main__:main"

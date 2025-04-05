@@ -1,0 +1,11 @@
+README.md
+pyproject.toml
+cat_platformer/__init__.py
+cat_platformer/__main__.py
+cat_platformer/game.py
+cat_platformer.egg-info/PKG-INFO
+cat_platformer.egg-info/SOURCES.txt
+cat_platformer.egg-info/dependency_links.txt
+cat_platformer.egg-info/entry_points.txt
+cat_platformer.egg-info/requires.txt
+cat_platformer.egg-info/top_level.txt
