@@ -2404,7 +2404,7 @@ class Game:
         # Title with shadow for better visibility
         shadow_offset = 3
         title_shadow = self.title_font.render(
-            "CAT GAME", True, (20, 20, 20)
+            "CAT GAME by MIŁOSZ", True, (20, 20, 20)
         )  # Updated Title
         title_shadow_rect = title_shadow.get_rect(
             center=(WIDTH // 2 + shadow_offset, HEIGHT // 3 + shadow_offset)
@@ -2412,7 +2412,7 @@ class Game:
         screen.blit(title_shadow, title_shadow_rect)
 
         title_text = self.title_font.render(
-            "CAT GAME", True, (240, 200, 80)
+            "CAT GAME by MIŁOSZ", True, (240, 200, 80)
         )  # Updated Title & Bright gold color
         title_rect = title_text.get_rect(center=(WIDTH // 2, HEIGHT // 3))
         screen.blit(title_text, title_rect)

@@ -224,7 +224,7 @@ class Game:
     def draw_splash_screen(self):
         """Draw the splash screen with title and instructions."""
         # Title
-        title_text = self.title_font.render("CAT PLATFORMER", True, (70, 30, 20))
+        title_text = self.title_font.render("CAT GAME by MIŁOSZ", True, (70, 30, 20))
         title_rect = title_text.get_rect(center=(WIDTH // 2, HEIGHT // 3))
         screen.blit(title_text, title_rect)
 
