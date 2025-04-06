@@ -930,17 +930,22 @@ class ParallaxBackground:
         self.layers = [layer1, layer2, layer3, layer4, layer5]
 
 
-def load_animation_frames(animation_name):
-    """Load animation frames from the graphics directory."""
+def load_animation_frames(animation_name, cat_type="cat"):
+    """Load animation frames from the graphics directory.
+
+    Args:
+        animation_name: The name of the animation to load (e.g., 'Idle', 'Run')
+        cat_type: The cat sprite variant to use ('cat' or 'cat2')
+    """
     frames = []
-    path_pattern = f"assets/graphics/cat/{animation_name} (*).png"
+    path_pattern = f"assets/graphics/{cat_type}/{animation_name} (*).png"
     matching_files = sorted(
         glob.glob(path_pattern), key=lambda x: int(x.split("(")[1].split(")")[0])
     )
 
     if not matching_files:
         logger.warning(
-            f"No animation frames found for {animation_name}. Using fallback."
+            f"No animation frames found for {animation_name} in {cat_type}. Using fallback."
         )
         # Create a simple colored square as fallback
         fallback = pygame.Surface((50, 50), pygame.SRCALPHA)
@@ -1512,23 +1517,28 @@ class ParticleSystem:
 class Cat(pygame.sprite.Sprite):
     """Cat sprite that the player controls."""
 
-    def __init__(self):
+    def __init__(self, cat_type="cat"):
         super().__init__()
+
+        # Cat sprite type
+        self.cat_type = cat_type
 
         # Load all animation frames
         self.animations = {}
         try:
             self.animations = {
-                "idle": load_animation_frames("Idle"),
-                "run": load_animation_frames("Run"),
-                "jump": load_animation_frames("Jump"),
-                "fall": load_animation_frames("Fall"),
-                "dead": load_animation_frames("Dead"),
-                "slide": load_animation_frames("Slide"),  # Add slide animation
+                "idle": load_animation_frames("Idle", self.cat_type),
+                "run": load_animation_frames("Run", self.cat_type),
+                "jump": load_animation_frames("Jump", self.cat_type),
+                "fall": load_animation_frames("Fall", self.cat_type),
+                "dead": load_animation_frames("Dead", self.cat_type),
+                "slide": load_animation_frames(
+                    "Slide", self.cat_type
+                ),  # Add slide animation
             }
-            logger.info("Cat animations loaded successfully")
+            logger.info(f"Cat animations for {self.cat_type} loaded successfully")
         except Exception as e:
-            logger.error(f"Error loading cat animations: {e}")
+            logger.error(f"Error loading cat animations for {self.cat_type}: {e}")
             # Create fallback animations with colored rectangles
             fallback = pygame.Surface((50, 50), pygame.SRCALPHA)
             pygame.draw.rect(fallback, (255, 0, 0), fallback.get_rect())  # Red
@@ -1564,6 +1574,56 @@ class Cat(pygame.sprite.Sprite):
         self.slide_duration = 45  # Frames to stay in slide (about 0.75 seconds)
         self.slide_cooldown = 0
         self.slide_cooldown_duration = 30  # Frames of cooldown
+
+    def change_cat_type(self, new_cat_type):
+        """Change the cat sprite type and reload animations."""
+        if self.cat_type == new_cat_type:
+            return  # No change needed
+
+        # Save current position and state
+        current_pos = self.rect.bottomleft
+        current_animation = self.current_animation
+
+        # Update cat type
+        self.cat_type = new_cat_type
+
+        # Reload animations
+        try:
+            self.animations = {
+                "idle": load_animation_frames("Idle", self.cat_type),
+                "run": load_animation_frames("Run", self.cat_type),
+                "jump": load_animation_frames("Jump", self.cat_type),
+                "fall": load_animation_frames("Fall", self.cat_type),
+                "dead": load_animation_frames("Dead", self.cat_type),
+                "slide": load_animation_frames("Slide", self.cat_type),
+            }
+            logger.info(f"Cat animations changed to {self.cat_type}")
+        except Exception as e:
+            logger.error(f"Error changing cat animations to {self.cat_type}: {e}")
+
+        # Reset animation state
+        self.frame_index = 0
+        self.current_animation = current_animation
+        self.image = self.animations[self.current_animation][self.frame_index]
+
+        # Restore position
+        self.rect = self.image.get_rect()
+        self.rect.bottomleft = current_pos
+
+        # Create a sparkle effect when changing cat
+        game_instance = Game.get_instance()
+        if game_instance:
+            game_instance.particle_system.add_particles(
+                self.rect.centerx,
+                self.rect.centery,
+                count=30,
+                color_range=[(200, 255), (200, 255), (200, 255)],  # White/gold sparkle
+                speed_range=[(-2, 2), (-2, 2)],
+                size_range=(3, 7),
+                lifetime_range=(30, 50),
+            )
+            # Play sound effect
+            game_instance.play_sound("powerup")
 
     def slide(self):
         """Make the cat slide if on the ground and not already sliding."""
@@ -2292,13 +2352,19 @@ class Game:
         # Set this instance as the current one
         Game._instance = self
 
-        self.cat = Cat()
+        # Available cat types and current selection
+        self.available_cat_types = ["cat", "cat2"]
+        self.current_cat_type = random.choice(
+            self.available_cat_types
+        )  # Randomly select initial cat
+
+        self.cat = Cat(self.current_cat_type)
         self.all_sprites = pygame.sprite.Group(self.cat)
         self.obstacles = pygame.sprite.Group()
         self.bullets = pygame.sprite.Group()  # Group for bullets
 
         # Create splash screen cat
-        self.splash_cat = Cat()
+        self.splash_cat = Cat(self.current_cat_type)
         self.splash_cat.rect.bottomleft = (20, GROUND_LEVEL)  # Start near left edge
         self.splash_cat.current_animation = "idle"  # Start in idle state
         self.splash_cat_moving_right = True
@@ -2352,6 +2418,35 @@ class Game:
         self._load_sounds()
 
         self.last_shot_score = 0  # Track score for shot availability
+
+    def change_cat_type(self, cat_type_index):
+        """Switch to a different cat sprite."""
+        if cat_type_index < 0 or cat_type_index >= len(self.available_cat_types):
+            return  # Invalid index
+
+        new_cat_type = self.available_cat_types[cat_type_index]
+        if new_cat_type == self.current_cat_type:
+            return  # No change needed
+
+        self.current_cat_type = new_cat_type
+
+        # Update the cat sprite
+        self.cat.change_cat_type(new_cat_type)
+
+        # Also update splash cat if showing splash screen
+        if self.show_splash:
+            self.splash_cat.change_cat_type(new_cat_type)
+
+        # Add a notification popup
+        self.score_popups.append(
+            {
+                "text": f"CAT SPRITE: {cat_type_index + 1}",
+                "pos": (WIDTH // 2, HEIGHT // 3),
+                "lifetime": 90,
+                "color": (255, 255, 100),  # Yellow
+                "size": 32,
+            }
+        )
 
     def _load_high_score(self):
         """Load the high score from a file."""
@@ -2435,6 +2530,7 @@ class Game:
             "Help the cat survive the run!",  # Updated description
             "UP ARROW - Jump | DOWN ARROW - Slide",
             "SPACE - Shoot (destroys obstacles)",
+            "1/2 KEYS - Switch cat sprite",
             "Avoid hitting obstacles while advancing!",
             "Earn 1 shot for every 20 points scored",
             "Jump into GLOWING balloons for a double jump!",
@@ -2454,6 +2550,21 @@ class Game:
 
         # Draw the splash cat
         screen.blit(self.splash_cat.image, self.splash_cat.rect)
+
+        # Draw cat sprite indicator
+        cat_type_text = self.font.render(
+            f"Current Cat: {self.available_cat_types.index(self.current_cat_type) + 1}",
+            True,
+            (255, 255, 100),
+        )
+        cat_type_rect = cat_type_text.get_rect(
+            center=(WIDTH // 2, HEIGHT // 2 + len(instructions) * 40 + 20)
+        )
+        # Text box background
+        bg_rect = cat_type_rect.inflate(20, 10)
+        pygame.draw.rect(screen, (255, 255, 255, 180), bg_rect, border_radius=5)
+        pygame.draw.rect(screen, (255, 200, 0), bg_rect, width=2, border_radius=5)
+        screen.blit(cat_type_text, cat_type_rect)
 
     def update_difficulty(self):
         """Increase game difficulty based on score."""
@@ -2817,6 +2928,10 @@ class Game:
 
                         # Reset obstacle history tracking to prevent pattern exploitation
                         Obstacle.reset_history()
+                    elif event.key == pygame.K_1:  # Switch to cat sprite 1
+                        self.change_cat_type(0)
+                    elif event.key == pygame.K_2:  # Switch to cat sprite 2
+                        self.change_cat_type(1)
 
             if not self.game_over and not self.show_splash:
                 # Spawn obstacles
