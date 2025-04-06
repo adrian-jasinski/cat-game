@@ -2559,34 +2559,137 @@ class Game:
 
     def draw_score(self):
         """Draw the current score and other game information."""
-        # Main score
-        score_text = self.font.render(f"Score: {self.score}", True, BLACK)
-        screen.blit(score_text, (10, 10))
+        icon_size = 24  # Size of the icons
+        padding = 5  # Padding between icon and text
 
-        # High score
+        # Helper function to draw small icons
+        def draw_icon(x, y, icon_type):
+            icon_surface = pygame.Surface((icon_size, icon_size), pygame.SRCALPHA)
+
+            if icon_type == "score":
+                # Score icon (star)
+                star_points = []
+                center = (icon_size // 2, icon_size // 2)
+                outer_radius = icon_size // 2 - 2
+                inner_radius = outer_radius // 2
+
+                for i in range(10):  # 5 points with 10 vertices
+                    angle = math.pi / 2 + i * math.pi * 2 / 10
+                    radius = outer_radius if i % 2 == 0 else inner_radius
+                    x_point = center[0] + radius * math.cos(angle)
+                    y_point = center[1] - radius * math.sin(angle)
+                    star_points.append((x_point, y_point))
+
+                pygame.draw.polygon(
+                    icon_surface, (255, 215, 0), star_points
+                )  # Gold star
+
+            elif icon_type == "high_score":
+                # Trophy icon
+                # Trophy cup
+                pygame.draw.rect(icon_surface, (255, 215, 0), (8, 4, 8, 12))  # Cup body
+                pygame.draw.rect(icon_surface, (255, 215, 0), (5, 4, 14, 4))  # Cup top
+                pygame.draw.rect(
+                    icon_surface, (255, 215, 0), (10, 16, 4, 4)
+                )  # Cup base
+                pygame.draw.rect(
+                    icon_surface, (255, 215, 0), (8, 20, 8, 2)
+                )  # Base plate
+
+            elif icon_type == "double_jump":
+                # Double jump icon (two up arrows)
+                arrow_color = (255, 165, 0)  # Orange color
+                # First arrow
+                pygame.draw.polygon(
+                    icon_surface, arrow_color, [(6, 16), (12, 6), (18, 16)]
+                )
+                # Second arrow (slightly lower)
+                pygame.draw.polygon(
+                    icon_surface, arrow_color, [(6, 22), (12, 12), (18, 22)]
+                )
+
+            elif icon_type == "shots":
+                # Bullet icon
+                bullet_color = YELLOW
+                # Bullet shape
+                pygame.draw.circle(
+                    icon_surface,
+                    bullet_color,
+                    (icon_size // 2, icon_size // 2),
+                    icon_size // 3,
+                )
+                # Glow effect
+                for r in range(icon_size // 3 + 1, icon_size // 2):
+                    alpha = 255 - (r - icon_size // 3) * 200 // (icon_size // 6)
+                    glow_color = (
+                        bullet_color[0],
+                        bullet_color[1],
+                        bullet_color[2],
+                        alpha,
+                    )
+                    pygame.draw.circle(
+                        icon_surface, glow_color, (icon_size // 2, icon_size // 2), r, 1
+                    )
+
+            elif icon_type == "speed":
+                # Speed icon (sideways lightning bolt)
+                bolt_color = (100, 100, 255)  # Blue lightning
+                pygame.draw.polygon(
+                    icon_surface,
+                    bolt_color,
+                    [
+                        (4, 12),  # Left point
+                        (14, 6),  # Top right
+                        (12, 12),  # Middle indent
+                        (20, 12),  # Right point
+                        (10, 18),  # Bottom left
+                        (12, 12),  # Middle indent again
+                    ],
+                )
+
+            screen.blit(icon_surface, (x, y))
+            return (
+                x + icon_size + padding
+            )  # Return position after the icon for text alignment
+
+        # Main score with icon
+        text_x = draw_icon(10, 10, "score")
+        score_text = self.font.render(f"Score: {self.score}", True, BLACK)
+        screen.blit(score_text, (text_x, 10))
+
+        # High score with icon
         high_score_text = self.font.render(
             f"High Score: {self.high_score}", True, (100, 50, 150)
         )
-        high_score_rect = high_score_text.get_rect(topright=(WIDTH - 10, 10))
-        screen.blit(high_score_text, high_score_rect)
+        text_x = draw_icon(
+            WIDTH - high_score_text.get_width() - icon_size - padding - 10,
+            10,
+            "high_score",
+        )
+        screen.blit(high_score_text, (text_x, 10))
 
-        # Double Jumps Available
+        # Double Jumps Available with icon
         dj_text = self.font.render(
             f"Double Jumps: {self.cat.double_jumps_available}", True, (255, 165, 0)
         )  # Orange color
-        dj_rect = dj_text.get_rect(topright=(WIDTH - 10, 40))
-        screen.blit(dj_text, dj_rect)
+        text_x = draw_icon(
+            WIDTH - dj_text.get_width() - icon_size - padding - 10, 40, "double_jump"
+        )
+        screen.blit(dj_text, (text_x, 40))
 
-        # Shots Available
+        # Shots Available with icon
         shots_text = self.font.render(
             f"Shots: {self.cat.shots_available}", True, YELLOW
         )
-        shots_rect = shots_text.get_rect(topright=(WIDTH - 10, 70))
-        screen.blit(shots_text, shots_rect)
+        text_x = draw_icon(
+            WIDTH - shots_text.get_width() - icon_size - padding - 10, 70, "shots"
+        )
+        screen.blit(shots_text, (text_x, 70))
 
-        # Current speed as an indicator of difficulty
+        # Current speed with icon
+        text_x = draw_icon(10, 40, "speed")
         speed_text = self.font.render(f"Speed: {self.current_speed:.1f}", True, BLACK)
-        screen.blit(speed_text, (10, 40))
+        screen.blit(speed_text, (text_x, 40))
 
         # Draw score popups
         for popup in self.score_popups:
