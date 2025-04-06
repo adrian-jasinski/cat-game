@@ -1942,17 +1942,17 @@ class Obstacle(pygame.sprite.Sprite):
         ]:
             self.rect.bottom = GROUND_LEVEL
         elif self.type == "balloon":
-            # Standard balloon is high in the air
-            self.rect.y = GROUND_LEVEL - self.rect.height - random.randint(200, 250)
+            # Standard balloon is now closer to the ground
+            self.rect.y = GROUND_LEVEL - self.rect.height - random.randint(100, 180)
         elif self.type == "low_balloon":
-            # Low balloon requires sliding under it
-            self.rect.y = GROUND_LEVEL - self.rect.height - random.randint(70, 120)
+            # Low balloon requires sliding under it - keep very low
+            self.rect.y = GROUND_LEVEL - self.rect.height - random.randint(50, 90)
         elif self.type == "glow_balloon":
-            # Glow balloon should be in jumping range
-            self.rect.y = GROUND_LEVEL - self.rect.height - random.randint(150, 180)
+            # Glow balloon should be in jumping range - slightly higher than regular balloons
+            self.rect.y = GROUND_LEVEL - self.rect.height - random.randint(120, 160)
         elif self.type == "glowing_obstacle":
             # Glowing obstacle should be in the middle range - can be jumped over or slid under
-            self.rect.y = GROUND_LEVEL - self.rect.height - random.randint(120, 150)
+            self.rect.y = GROUND_LEVEL - self.rect.height - random.randint(90, 130)
 
     def _setup_low_balloon_obstacle(self):
         """Set up a low-flying balloon obstacle that requires sliding under."""
@@ -2024,8 +2024,8 @@ class Obstacle(pygame.sprite.Sprite):
         self.image = pygame.transform.scale(self.image, (target_width, target_height))
 
         self.rect = self.image.get_rect()
-        # Position balloon higher up - requires player NOT to jump
-        balloon_height = random.randint(80, 140)
+        # Position balloon lower - closer to ground level
+        balloon_height = random.randint(60, 120)
         self.rect.bottomleft = (WIDTH, GROUND_LEVEL - balloon_height)
 
     def _setup_glow_balloon_obstacle(self):
@@ -2042,8 +2042,8 @@ class Obstacle(pygame.sprite.Sprite):
         self.image = pygame.transform.scale(self.image, (target_width, target_height))
 
         self.rect = self.image.get_rect()
-        # Position slightly higher than normal balloons, but still reachable
-        balloon_height = random.randint(100, 160)
+        # Position slightly higher than normal balloons, but still reachable and lower than before
+        balloon_height = random.randint(80, 140)
         self.rect.bottomleft = (WIDTH, GROUND_LEVEL - balloon_height)
 
     def _setup_glowing_obstacle(self):
