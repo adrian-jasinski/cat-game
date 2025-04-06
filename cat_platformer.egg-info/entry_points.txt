@@ -1,2 +1,0 @@
-[console_scripts]
-cat-platformer = cat_platformer.__main__:main

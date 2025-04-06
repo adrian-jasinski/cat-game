@@ -36,6 +36,8 @@ GRAVITY = 1
 JUMP_FORCE = -20
 OBSTACLE_SPEED = 7
 ANIMATION_SPEED = 6  # Frames per animation change
+BULLET_SPEED = 15  # Speed of bullets for shooting
+SHOOT_THRESHOLD = 20  # Score needed to earn a shot
 
 # Difficulty progression
 DIFFICULTY_INCREASE_RATE = 0.2  # How much to increase speed per 10 points
@@ -50,6 +52,7 @@ GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 BROWN = (139, 69, 19)
 SKY_BLUE = (100, 180, 255)  # Much deeper blue for background
+YELLOW = (255, 255, 0)  # Yellow for bullet effects
 
 # Set up the display
 screen = pygame.display.set_mode(SCREEN_SIZE)
@@ -59,6 +62,38 @@ clock = pygame.time.Clock()  # Create clock instance for time tracking
 # Create game directory for assets if it doesn't exist
 if not os.path.exists("assets"):
     os.makedirs("assets")
+
+
+# Bullet class for shooting ability
+class Bullet(pygame.sprite.Sprite):
+    """Bullet sprite that can destroy obstacles."""
+
+    def __init__(self, x, y):
+        super().__init__()
+        self.image = pygame.Surface((15, 15), pygame.SRCALPHA)
+        pygame.draw.circle(self.image, YELLOW, (7, 7), 7)  # Yellow ball
+
+        # Add a glowing effect
+        glow_surf = pygame.Surface((25, 25), pygame.SRCALPHA)
+        pygame.draw.circle(glow_surf, (255, 255, 100, 100), (12, 12), 12)
+
+        # Apply the glow to our bullet
+        final_surf = pygame.Surface((25, 25), pygame.SRCALPHA)
+        final_surf.blit(glow_surf, (0, 0))
+        final_surf.blit(self.image, (5, 5))
+
+        self.image = final_surf
+        self.rect = self.image.get_rect()
+        # Position the bullet at the middle of the cat
+        self.rect.center = (x, y)
+        self.speed = BULLET_SPEED
+
+    def update(self):
+        """Move the bullet and check if it's off-screen."""
+        self.rect.x += self.speed
+        # Remove bullet if it goes off screen
+        if self.rect.left > WIDTH:
+            self.kill()
 
 
 class ParallaxBackground:
@@ -1530,6 +1565,7 @@ class Cat(pygame.sprite.Sprite):
         self.on_ground = True
         self.is_dead = False
         self.double_jumps_available = 0  # Counter for double jumps
+        self.shots_available = 0  # Counter for available shots
 
         # Sliding state
         self.is_sliding = False
@@ -1735,6 +1771,15 @@ class Cat(pygame.sprite.Sprite):
                     lifetime_range=(15, 30),
                 )
                 game_instance.play_sound("double_jump")  # Play double jump sound
+
+    def shoot(self):
+        """Make the cat shoot a bullet if shots are available."""
+        if self.is_dead or self.shots_available <= 0:
+            return False
+
+        # Consume a shot and return True to indicate success
+        self.shots_available -= 1
+        return True
 
 
 # Obstacle class
@@ -2233,6 +2278,7 @@ class Game:
         self.all_sprites = pygame.sprite.Group(self.cat)
         self.obstacles = pygame.sprite.Group()
         self.clouds = pygame.sprite.Group()
+        self.bullets = pygame.sprite.Group()  # Group for bullets
 
         # Create splash screen cat
         self.splash_cat = Cat()
@@ -2293,6 +2339,8 @@ class Game:
 
         # Sound effects
         self._load_sounds()
+
+        self.last_shot_score = 0  # Track score for shot availability
 
     def _load_high_score(self):
         """Load the high score from a file."""
@@ -2374,11 +2422,12 @@ class Game:
         # Instructions with text boxes for better visibility
         instructions = [
             "Help the cat survive the run!",  # Updated description
-            "Press SPACE to jump",
-            "Avoid hitting normal balloons while jumping!",  # Updated rule
-            "Jump into GLOWING balloons for a double jump!",  # New rule
-            "Press R to restart after game over",
-            "Press any key to start your adventure!",  # Improved text
+            "UP ARROW - Jump | DOWN ARROW - Slide",
+            "SPACE - Shoot (destroys obstacles)",
+            "Avoid hitting obstacles while advancing!",
+            "Earn 1 shot for every 20 points scored",
+            "Jump into GLOWING balloons for a double jump!",
+            "Press any key to start your adventure!",
         ]
 
         for i, line in enumerate(instructions):
@@ -2421,88 +2470,93 @@ class Game:
             self.last_obstacle = current_time
 
     def check_collisions(self):
-        """Check if the cat has collided with any obstacles."""
-        return self.cat.check_collisions()
+        """Check for collisions with obstacles."""
+        # Cat-obstacle collision check from the Cat class
+        if self.cat.check_collisions():
+            self.game_over = True
+
+        # Bullet-obstacle collision
+        collisions = pygame.sprite.groupcollide(
+            self.bullets, self.obstacles, True, True
+        )
+        if collisions:
+            # Add score for obstacles destroyed by bullets
+            for bullet, obstacles_hit in collisions.items():
+                for obstacle in obstacles_hit:
+                    if not obstacle.already_passed:
+                        self.add_score(1)
+                        # Add explosion particles
+                        self.particle_system.add_particles(
+                            obstacle.rect.centerx,
+                            obstacle.rect.centery,
+                            count=30,
+                            color_range=[
+                                (220, 255),
+                                (180, 230),
+                                (50, 150),
+                            ],  # Yellow explosion
+                            speed_range=[(-3, 3), (-3, 3)],
+                            size_range=(3, 8),
+                            lifetime_range=(20, 40),
+                        )
+                        # Play explosion sound
+                        self.play_sound("jump")  # Reuse existing sound
 
     def update_score(self):
-        """Update the score when obstacles are passed."""
-        for obstacle in self.obstacles:
+        """Update score when passing obstacles."""
+        for obstacle in list(self.obstacles):
             if obstacle.rect.right < self.cat.rect.left and not obstacle.already_passed:
-                # Add base score
-                score_to_add = 1
-
-                # Give bonus points for balloon obstacles as they're harder to avoid
-                if obstacle.type == "balloon":
-                    score_to_add = 2
-                    self.combo_counter += 1
-
-                    # Create bonus score popup
-                    self.score_popups.append(
-                        {
-                            "text": f"+{score_to_add} BONUS!",
-                            "pos": (self.cat.rect.centerx, self.cat.rect.top - 20),
-                            "color": (200, 50, 50),
-                            "life": 60,  # frames
-                        }
-                    )
-
-                    # Play bonus sound
-                    self.play_sound("bonus")
-                else:
-                    # Regular obstacle, reset combo
-                    self.combo_counter = 0
-
-                # Apply combo bonus if applicable
-                if self.combo_counter > 1:
-                    combo_bonus = (
-                        self.combo_counter // 2
-                    )  # Every 2 balloons in a row gives bonus point
-                    score_to_add += combo_bonus
-
-                    # Create combo popup for big combos
-                    if self.combo_counter >= 3:
-                        self.score_popups.append(
-                            {
-                                "text": f"COMBO x{self.combo_counter}!",
-                                "pos": (self.cat.rect.centerx, self.cat.rect.top - 40),
-                                "color": (200, 200, 50),
-                                "life": 60,  # frames
-                            }
-                        )
-
-                # Update score and check for background change
-                old_score = self.score
-                self.score += score_to_add
-
-                # Check if we crossed a 50-point threshold and change background
-                if old_score // 50 < self.score // 50:
-                    new_style = self.background.cycle_background()
-                    style_name = ["Blue Sky", "Sunset", "Night", "Dawn"][new_style]
-                    self.score_popups.append(
-                        {
-                            "text": f"NEW BACKGROUND: {style_name}!",
-                            "pos": (WIDTH // 2, HEIGHT // 2 - 50),
-                            "color": (50, 200, 200),
-                            "life": 90,  # frames
-                        }
-                    )
-
+                self.add_score(1)
                 obstacle.already_passed = True
 
-                # Update difficulty whenever score increases
-                self.update_difficulty()
+    def add_score(self, points):
+        """Add points to the score and check if a new shot is earned."""
+        self.score += points
+        self.score_display_value = self.score
 
-                # Play point sound
-                self.play_sound("point")
+        # Update score popup
+        self.score_popups.append(
+            {
+                "text": f"+{points}",
+                "pos": (
+                    self.cat.rect.x + random.randint(-20, 20),
+                    self.cat.rect.y - 40,
+                ),
+                "lifetime": 45,
+                "color": WHITE,
+                "size": 24,
+            }
+        )
+
+        # Check if player earns a new shot
+        if self.score >= self.last_shot_score + SHOOT_THRESHOLD:
+            self.cat.shots_available += 1
+            self.last_shot_score = self.score
+
+            # Show a notification for new shot
+            self.score_popups.append(
+                {
+                    "text": "+1 SHOT!",
+                    "pos": (WIDTH // 2, HEIGHT // 2 - 50),
+                    "lifetime": 60,
+                    "color": YELLOW,
+                    "size": 28,
+                }
+            )
+
+        # Update difficulty based on score
+        self.update_difficulty()
 
     def update_score_popups(self):
         """Update the score popup animations."""
         for popup in self.score_popups[:]:
-            popup["pos"] = (popup["pos"][0], popup["pos"][1] - 1)  # Move up
-            popup["life"] -= 1
+            popup["lifetime"] -= 1
+
+            # Move the popup upward
+            popup["pos"] = (popup["pos"][0], popup["pos"][1] - 1)
 
             # Remove if expired
-            if popup["life"] <= 0:
+            if popup["lifetime"] <= 0:
                 self.score_popups.remove(popup)
 
     def draw_score(self):
@@ -2525,29 +2579,40 @@ class Game:
         dj_rect = dj_text.get_rect(topright=(WIDTH - 10, 40))
         screen.blit(dj_text, dj_rect)
 
+        # Shots Available
+        shots_text = self.font.render(
+            f"Shots: {self.cat.shots_available}", True, YELLOW
+        )
+        shots_rect = shots_text.get_rect(topright=(WIDTH - 10, 70))
+        screen.blit(shots_text, shots_rect)
+
         # Current speed as an indicator of difficulty
         speed_text = self.font.render(f"Speed: {self.current_speed:.1f}", True, BLACK)
         screen.blit(speed_text, (10, 40))
 
-        # Combo counter if active
-        if self.combo_counter > 1:
-            combo_text = self.combo_font.render(
-                f"Combo: {self.combo_counter}x", True, (200, 50, 50)
-            )
-            combo_rect = combo_text.get_rect(midtop=(WIDTH // 2, 10))
-            screen.blit(combo_text, combo_rect)
-
         # Draw score popups
         for popup in self.score_popups:
+            # Create text with size from popup
+            font_size = popup.get("size", 24)
+            popup_font = pygame.font.SysFont("Arial", font_size)
+
             # Determine color with proper fade out
             color = popup["color"]
-            if popup["life"] < 20:
-                # Apply fading by creating a color with adjusted alpha
-                popup_text = self.font.render(popup["text"], True, color)
-                # No need to change alpha since we're not using a surface with per-pixel alpha
-            else:
-                popup_text = self.font.render(popup["text"], True, color)
 
+            # Apply fading for last 20 frames
+            if popup["lifetime"] < 20:
+                # Calculate alpha based on remaining lifetime
+                alpha = int(255 * (popup["lifetime"] / 20))
+                # We can't change text alpha directly, so we'll just make the color lighter
+                if isinstance(color, tuple) and len(color) == 3:
+                    # Convert RGB to a lighter version based on lifetime
+                    fade_factor = popup["lifetime"] / 20
+                    r = int(color[0] + (255 - color[0]) * (1 - fade_factor))
+                    g = int(color[1] + (255 - color[1]) * (1 - fade_factor))
+                    b = int(color[2] + (255 - color[2]) * (1 - fade_factor))
+                    color = (r, g, b)
+
+            popup_text = popup_font.render(popup["text"], True, color)
             popup_rect = popup_text.get_rect(center=popup["pos"])
             screen.blit(popup_text, popup_rect)
 
@@ -2617,6 +2682,10 @@ class Game:
                         event.key == pygame.K_DOWN and not self.game_over
                     ):  # Down arrow for slide
                         self.cat.slide()
+                    elif (
+                        event.key == pygame.K_SPACE and not self.game_over
+                    ):  # Space to shoot
+                        self.shoot_bullet()
                     elif event.key == pygame.K_r and self.game_over:
                         self.reset()
                     elif event.key == pygame.K_m:  # Mute toggle
@@ -2650,6 +2719,9 @@ class Game:
 
                 # Update particles
                 self.particle_system.update()
+
+                # Update bullets
+                self.bullets.update()
 
             elif self.show_splash:
                 # Only update clouds during splash screen
@@ -2745,6 +2817,7 @@ class Game:
 
                 # Draw cat and obstacles
                 self.obstacles.draw(screen)
+                self.bullets.draw(screen)  # Draw bullets
                 screen.blit(self.cat.image, self.cat.rect)
 
                 # Draw particles
@@ -2760,6 +2833,35 @@ class Game:
 
             # Cap framerate
             clock.tick(FPS)
+
+    def shoot_bullet(self):
+        """Create a bullet at the cat's position if shots are available."""
+        if self.cat.shoot():
+            # Create a bullet at cat's position
+            bullet = Bullet(self.cat.rect.centerx, self.cat.rect.centery)
+            self.bullets.add(bullet)
+            self.all_sprites.add(bullet)
+
+            # Add particle effect for shooting
+            self.particle_system.add_particles(
+                self.cat.rect.right,
+                self.cat.rect.centery,
+                count=15,
+                color_range=[
+                    (220, 255),
+                    (180, 230),
+                    (50, 150),
+                ],  # Yellow/gold particles
+                speed_range=[(-1, 1), (-1, 1)],
+                size_range=(2, 5),
+                lifetime_range=(10, 20),
+            )
+
+            # Play shoot sound
+            self.play_sound("powerup")  # Reuse existing sound
+
+            return True
+        return False
 
 
 # Run the game directly if this file is executed
