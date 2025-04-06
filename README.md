@@ -1,17 +1,18 @@
 # Cat Platformer Game
 
-A simple 2D platformer game built with Pygame where a red cat jumps over obstacles.
+A simple 2D platformer game built with Pygame where a cat jumps over obstacles.
 
 ## Features
 
 - Animated cat character with different animations for running, jumping, falling, and death
-- Beautiful multi-layered mountain dusk background with purple mountains and silhouetted trees
-- Realistic natural obstacles (rocks, logs, bushes, and fallen trees)
+- Beautiful multi-layered mountain background with parallax scrolling
+- Various obstacles to avoid (rocks, cacti, bushes, and balloons)
 - Detailed ground with grass, soil texture, and small flowers
 - Particle effects for jumps and impacts
 - Increasing difficulty as you progress
 - Score tracking
 - Death animations when you collide with obstacles
+- Shooting ability that destroys obstacles (earn a shot for every 20 points)
 
 ## Screenshots
 
@@ -57,81 +58,26 @@ OR
 python play.py
 ```
 
-## Quick Setup
-
-Use the provided setup scripts for easy installation:
-
-- On Linux/macOS:
-  ```bash
-  chmod +x setup.sh
-  ./setup.sh
-  ```
-
-- On Windows:
-  ```
-  setup.bat
-  ```
-
 ## Running the Game
 
 After installation, you can run the game in several ways:
 
-1. Using the installed command-line script:
-   ```bash
-   cat-platformer
-   ```
-
-2. Using the executable script in the project root:
+1. Using the executable script in the project root:
    ```bash
    ./cat_platformer_game.py
    ```
 
-3. As a Python module:
+2. As a Python module:
    ```bash
    python -m cat_platformer
    ```
 
-4. Running the main script directly:
+3. Running the main script directly:
    ```bash
    python cat_platformer_game.py
    ```
 
-## Setup with uv (Recommended)
-
-[uv](https://github.com/astral-sh/uv) is a fast Python package installer and resolver. Here's how to set up the project using uv:
-
-1. Make sure you have Python 3.12 installed
-2. Install uv if you don't have it already:
-   ```bash
-   curl -fsSL https://astral.sh/uv/install.sh | bash
-   ```
-
-3. Create a virtual environment in the project directory:
-   ```bash
-   uv venv --python=python3.12
-   ```
-
-4. Activate the virtual environment:
-   - On Linux/macOS:
-     ```bash
-     source .venv/bin/activate
-     ```
-   - On Windows:
-     ```bash
-     .venv\Scripts\activate
-     ```
-
-5. Install dependencies from pyproject.toml:
-   ```bash
-   uv pip install -e .
-   ```
-
-6. Run the game:
-   ```bash
-   python cat_game.py
-   ```
-
-## Alternative Setup with pip
+## Setup with pip
 
 1. Make sure you have Python 3.12 installed
 2. Create a virtual environment:
@@ -153,36 +99,40 @@ After installation, you can run the game in several ways:
    ```
 5. Run the game:
    ```bash
-   python cat_game.py
+   python cat_platformer_game.py
    ```
 
-## Development
+## File Structure
 
-This project uses a pyproject.toml file for dependency management and build configuration. The project has been switched from requirements.txt to pyproject.toml for better packaging and distribution.
+The game files are organized as follows:
 
-You can install development dependencies with:
-
-```bash
-uv pip install -e ".[dev]"
 ```
-
-To format and lint your code, you can use:
-
-```bash
-# Format with black
-black cat_platformer
-
-# Sort imports
-isort cat_platformer
-
-# Lint with flake8
-flake8 cat_platformer
+cat-game/
+├── assets/                  # Game assets
+│   ├── graphics/           # All graphical assets
+│   │   ├── cat/            # Cat animation frames
+│   │   ├── ground/         # Ground textures
+│   │   └── obstacles/      # Obstacle images
+│   ├── backgrounds/        # Background images
+│   ├── sounds/             # Sound effects
+│   └── highscore.txt       # Saved high score
+├── cat_platformer/         # Game code
+│   ├── __init__.py         
+│   ├── __main__.py        
+│   └── game.py             # Main game logic
+├── cat_platformer_game.py  # Game launcher
+├── play.py                 # Launcher with version check
+└── ... other config files
 ```
 
 ## Controls
 
-- **Space**: Jump
+- **UP ARROW**: Jump
+- **DOWN ARROW**: Slide
+- **SPACE**: Shoot (when shots are available)
 - **R**: Restart game after game over
+- **M**: Toggle sound
+- **B**: Cycle through background styles
 
 ## Visibility Settings
 

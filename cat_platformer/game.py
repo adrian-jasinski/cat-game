@@ -10,9 +10,7 @@ import random
 import logging
 import pygame
 import glob
-import json
-from collections import deque
-from typing import List, Dict, Optional, Any, Tuple, Union
+from typing import Union
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -935,7 +933,7 @@ class ParallaxBackground:
 def load_animation_frames(animation_name):
     """Load animation frames from the graphics directory."""
     frames = []
-    path_pattern = f"graphics/cat/{animation_name} (*).png"
+    path_pattern = f"assets/graphics/cat/{animation_name} (*).png"
     matching_files = sorted(
         glob.glob(path_pattern), key=lambda x: int(x.split("(")[1].split(")")[0])
     )
@@ -2601,12 +2599,12 @@ class Game:
 
             # Apply fading for last 20 frames
             if popup["lifetime"] < 20:
-                # Calculate alpha based on remaining lifetime
-                alpha = int(255 * (popup["lifetime"] / 20))
+                # Calculate alpha based on remaining lifetime (used for color calculation)
+                alpha_factor = popup["lifetime"] / 20
                 # We can't change text alpha directly, so we'll just make the color lighter
                 if isinstance(color, tuple) and len(color) == 3:
                     # Convert RGB to a lighter version based on lifetime
-                    fade_factor = popup["lifetime"] / 20
+                    fade_factor = alpha_factor
                     r = int(color[0] + (255 - color[0]) * (1 - fade_factor))
                     g = int(color[1] + (255 - color[1]) * (1 - fade_factor))
                     b = int(color[2] + (255 - color[2]) * (1 - fade_factor))
