@@ -2111,6 +2111,20 @@ class Game:
         self.obstacles = pygame.sprite.Group()
         self.clouds = pygame.sprite.Group()
 
+        # Create splash screen cat
+        self.splash_cat = Cat()
+        self.splash_cat.rect.bottomleft = (20, GROUND_LEVEL)  # Start near left edge
+        self.splash_cat.current_animation = "idle"  # Start in idle state
+        self.splash_cat_moving_right = True
+        self.splash_cat_facing_right = True  # Track which way cat is facing
+        self.splash_cat_speed = 2  # Slower speed for splash screen
+
+        # Animation state tracking
+        self.splash_cat_state = "idle"  # Current state: "idle" or "run"
+        self.splash_cat_state_timer = 0
+        self.splash_cat_idle_duration = 120  # Frames to stay idle (about 2 seconds)
+        self.splash_cat_run_duration = 180  # Frames to stay running (about 3 seconds)
+
         # Create particle system
         self.particle_system = ParticleSystem()
 
@@ -2191,7 +2205,8 @@ class Game:
             self.sounds_enabled = False
 
         # Add placeholders for new sounds
-        # Actual loading would look like: self.sounds["powerup"] = pygame.mixer.Sound("path/to/powerup.wav")
+        # Example:
+        # self.sounds["powerup"] = pygame.mixer.Sound("path/to/powerup.wav")
         self.sounds["powerup"] = None
         self.sounds["double_jump"] = None
         self.sounds["jump"] = None  # Assume jump sound exists
@@ -2256,6 +2271,9 @@ class Game:
 
             # Text
             screen.blit(text, text_rect)
+
+        # Draw the splash cat
+        screen.blit(self.splash_cat.image, self.splash_cat.rect)
 
     def update_difficulty(self):
         """Increase game difficulty based on score."""
@@ -2538,17 +2556,79 @@ class Game:
             elif self.show_splash:
                 # Only update clouds during splash screen
                 self.clouds.update()
+
+                # Update splash cat animation and position
+                self.splash_cat_state_timer += 1
+
+                # State transitions between idle and run
+                if (
+                    self.splash_cat_state == "idle"
+                    and self.splash_cat_state_timer >= self.splash_cat_idle_duration
+                ):
+                    # Transition from idle to run
+                    self.splash_cat_state = "run"
+                    self.splash_cat_state_timer = 0
+                    self.splash_cat.current_animation = "run"
+                    self.splash_cat.frame_index = 0  # Reset animation frame index
+                elif (
+                    self.splash_cat_state == "run"
+                    and self.splash_cat_state_timer >= self.splash_cat_run_duration
+                ):
+                    # Transition from run to idle
+                    self.splash_cat_state = "idle"
+                    self.splash_cat_state_timer = 0
+                    self.splash_cat.current_animation = "idle"
+                    self.splash_cat.frame_index = 0  # Reset animation frame index
+
+                # Only move the cat when in run state
+                if self.splash_cat_state == "run":
+                    if self.splash_cat_moving_right:
+                        self.splash_cat.rect.x += self.splash_cat_speed
+                        if self.splash_cat.rect.right >= WIDTH - 20:
+                            self.splash_cat_moving_right = False
+                            self.splash_cat_facing_right = (
+                                False  # Update facing direction
+                            )
+                    else:
+                        self.splash_cat.rect.x -= self.splash_cat_speed
+                        if self.splash_cat.rect.left <= 20:
+                            self.splash_cat_moving_right = True
+                            self.splash_cat_facing_right = (
+                                True  # Update facing direction
+                            )
+
+                # Ensure splash cat stays on ground
+                self.splash_cat.rect.bottom = GROUND_LEVEL
+                self.splash_cat.on_ground = True  # Keep it grounded for animation state
+
+                # Update the animation
+                self.splash_cat.animation_timer += 1
+                if self.splash_cat.animation_timer >= ANIMATION_SPEED:
+                    self.splash_cat.animation_timer = 0
+                    # Get the current animation frames
+                    frames = self.splash_cat.animations[
+                        self.splash_cat.current_animation
+                    ]
+                    # Increment the frame index, looping back to 0 if necessary
+                    self.splash_cat.frame_index = (
+                        self.splash_cat.frame_index + 1
+                    ) % len(frames)
+                    # Get the current frame
+                    current_frame = frames[self.splash_cat.frame_index]
+
+                    # Apply direction-based flipping
+                    if not self.splash_cat_facing_right:
+                        self.splash_cat.image = pygame.transform.flip(
+                            current_frame, True, False
+                        )
+                    else:
+                        self.splash_cat.image = current_frame
+
+                # Flipping now happens during the animation update
+
             elif self.game_over:
                 # When game over, still update the cat for death animation
                 self.cat.update()
-                self.clouds.update()
-                # Background still moves a bit even when game over
-                self.background.update()
-
-                # Check for high score
-                if self.score > self.high_score:
-                    self.high_score = self.score
-                    self._save_high_score()
 
             # Draw everything
             screen.fill(SKY_BLUE)
