@@ -10,6 +10,9 @@ import random
 import logging
 import pygame
 import glob
+import json
+from collections import deque
+from typing import List, Dict, Optional, Any, Tuple, Union
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -17,6 +20,10 @@ logger = logging.getLogger(__name__)
 
 # Initialize pygame
 pygame.init()
+try:
+    pygame.mixer.init()  # Initialize the mixer for sound
+except pygame.error:
+    logging.warning("Could not initialize sound mixer")
 
 # Game constants
 SCREEN_SIZE = (800, 600)
@@ -1490,6 +1497,7 @@ class Cat(pygame.sprite.Sprite):
                 "jump": load_animation_frames("Jump"),
                 "fall": load_animation_frames("Fall"),
                 "dead": load_animation_frames("Dead"),
+                "slide": load_animation_frames("Slide"),  # Add slide animation
             }
             logger.info("Cat animations loaded successfully")
         except Exception as e:
@@ -1498,7 +1506,8 @@ class Cat(pygame.sprite.Sprite):
             fallback = pygame.Surface((50, 50), pygame.SRCALPHA)
             pygame.draw.rect(fallback, (255, 0, 0), fallback.get_rect())  # Red
             self.animations = {
-                state: [fallback] for state in ["idle", "run", "jump", "fall", "dead"]
+                state: [fallback]
+                for state in ["idle", "run", "jump", "fall", "dead", "slide"]
             }
 
         # Set initial animation state
@@ -1511,11 +1520,21 @@ class Cat(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.bottomleft = (100, GROUND_LEVEL)
 
+        # Original rect height (for collision detection during sliding)
+        self.normal_height = self.rect.height
+
         # Physics attributes
         self.velocity_y = 0
         self.on_ground = True
         self.is_dead = False
         self.double_jumps_available = 0  # Counter for double jumps
+
+        # Sliding state
+        self.is_sliding = False
+        self.slide_timer = 0
+        self.slide_duration = 45  # Frames to stay in slide (about 0.75 seconds)
+        self.slide_cooldown = 0  # Cooldown between slides
+        self.slide_cooldown_duration = 30  # Frames of cooldown
 
     def jump(self):
         """Make the cat jump if it's on the ground or has a double jump available."""
@@ -1536,6 +1555,10 @@ class Cat(pygame.sprite.Sprite):
             self.on_ground = False
             self.current_animation = "jump"
             self.frame_index = 0
+
+            # Cancel slide if jumping
+            self.is_sliding = False
+
         # Double jump from air
         elif self.double_jumps_available > 0:
             self.double_jumps_available -= 1
@@ -1559,152 +1582,205 @@ class Cat(pygame.sprite.Sprite):
                 )
                 game_instance.play_sound("double_jump")  # Play double jump sound
 
-    def die(self):
-        """Change to death animation when the cat dies."""
-        if not self.is_dead:
-            # Create impact particles
-            game_instance = Game.get_instance()
-            if game_instance:
-                game_instance.particle_system.add_impact_particles(
-                    self.rect.centerx, self.rect.centery
-                )
+    def slide(self):
+        """Make the cat slide if on the ground and not already sliding."""
+        if (
+            self.is_dead
+            or self.is_sliding
+            or not self.on_ground
+            or self.slide_cooldown > 0
+        ):
+            return
 
+        game_instance = Game.get_instance()
+
+        # Start sliding
+        self.is_sliding = True
+        self.slide_timer = 0
+        self.current_animation = "slide"
+        self.frame_index = 0
+
+        # Adjust hitbox height to be lower when sliding
+        self.rect.height = self.normal_height * 0.6
+
+        # Create slide dust effect
+        if game_instance:
+            game_instance.particle_system.add_particles(
+                self.rect.right,
+                self.rect.bottom,
+                count=8,
+                color_range=[(100, 120), (100, 120), (100, 120)],  # Gray dust
+                speed_range=[(-1, -3), (-0.5, 0.5)],
+                size_range=(2, 4),
+                lifetime_range=(10, 20),
+            )
+            game_instance.play_sound("slide")  # Play slide sound
+
+    def die(self):
+        """Make the cat die."""
+        if not self.is_dead:
             self.is_dead = True
             self.current_animation = "dead"
             self.frame_index = 0
+            self.velocity_y = JUMP_FORCE * 0.5  # Small bounce on death
+
+            # Reset sliding state
+            self.is_sliding = False
+            self.rect.height = self.normal_height
 
     def update_animation(self):
         """Update the cat's animation frame."""
-        # Increment animation timer
         self.animation_timer += 1
-
-        # Change frame when timer reaches threshold
         if self.animation_timer >= ANIMATION_SPEED:
             self.animation_timer = 0
-
-            # Determine appropriate animation based on state
-            if self.is_dead:
-                self.current_animation = "dead"
-            elif not self.on_ground:
-                if self.velocity_y < 0:
-                    self.current_animation = "jump"
-                else:
-                    self.current_animation = "fall"
-            else:
-                # When on ground and not dead, use running animation
-                self.current_animation = "run"
-
-            # Update frame index, looping back if needed
-            # For death animation, stay on last frame
-            if (
-                self.current_animation == "dead"
-                and self.frame_index >= len(self.animations[self.current_animation]) - 1
-            ):
-                self.frame_index = len(self.animations[self.current_animation]) - 1
-            else:
-                self.frame_index = (self.frame_index + 1) % len(
-                    self.animations[self.current_animation]
-                )
-
-            # Update the image
-            self.image = self.animations[self.current_animation][self.frame_index]
+            frames = self.animations[self.current_animation]
+            self.frame_index = (self.frame_index + 1) % len(frames)
+            self.image = frames[self.frame_index]
 
     def update(self):
         """Update the cat's position and animation."""
-        if not self.is_dead:
-            # Apply gravity
+        if self.is_dead:
             self.velocity_y += GRAVITY
             self.rect.y += self.velocity_y
+            self.update_animation()
+            return
 
-            # Check if cat is on ground
-            if self.rect.bottom >= GROUND_LEVEL:
-                self.rect.bottom = GROUND_LEVEL
-                self.velocity_y = 0
-                self.on_ground = True
+        # Handle sliding
+        if self.is_sliding:
+            self.slide_timer += 1
+            if self.slide_timer >= self.slide_duration:
+                # End slide
+                self.is_sliding = False
+                self.slide_cooldown = self.slide_cooldown_duration
+                self.rect.height = self.normal_height
 
-        # Update animation regardless of movement status
+        # Update slide cooldown
+        if self.slide_cooldown > 0:
+            self.slide_cooldown -= 1
+
+        # Apply gravity if not on ground
+        if not self.on_ground:
+            self.velocity_y += GRAVITY
+
+            # Set falling animation if velocity is positive and not dead
+            if self.velocity_y > 0 and self.current_animation != "fall":
+                self.current_animation = "fall"
+                self.frame_index = 0
+
+        # Update position
+        self.rect.y += self.velocity_y
+
+        # Check for ground collision
+        if self.rect.bottom >= GROUND_LEVEL:
+            self.rect.bottom = GROUND_LEVEL
+            self.velocity_y = 0
+            self.on_ground = True
+
+            # Set animation state if landing and not sliding or dead
+            if not self.is_sliding and self.current_animation not in ["idle", "run"]:
+                self.current_animation = "run"
+                self.frame_index = 0
+
+        # Update animation
         self.update_animation()
 
     def check_collisions(self):
-        """Check if the cat has collided with any obstacles."""
-        if not self.cat.is_dead:
-            for obstacle in self.obstacles:
-                if self.cat.rect.colliderect(obstacle.rect):
-                    # Special handling for balloon - only die if the cat is jumping
-                    if obstacle.obstacle_type == "balloon":
-                        if not self.cat.on_ground:  # Cat is jumping and hit balloon
-                            self.game_over = True
-                            self.cat.die()
-                            self.play_sound("hit")
-                    # Special handling for glowing balloon - gain double jump
-                    elif obstacle.obstacle_type == "glow_balloon":
-                        self.cat.double_jumps_available += 1
-                        # Add visual/audio feedback for power-up
-                        # Define particle properties for clarity
-                        powerup_colors = [  # Bright yellow particles
-                            (255, 255),
-                            (200, 255),
-                            (0, 100),
-                        ]
-                        self.particle_system.add_particles(
-                            x=obstacle.rect.centerx,
-                            y=obstacle.rect.centery,
-                            count=25,
-                            color_range=powerup_colors,
-                            speed_range=[(-2, 2), (-2, 2)],
-                            size_range=(4, 8),
-                            lifetime_range=(40, 70),
-                        )
-                        self.play_sound("powerup")
-                        obstacle.kill()  # Remove the balloon power-up
-                    else:
-                        # For all other obstacles, die on collision
-                        self.game_over = True
-                        self.cat.die()
-                        self.play_sound("hit")
+        """Check for collisions with obstacles."""
+        if self.is_dead:
+            return False
+
+        game = Game.get_instance()
+        if not game:
+            return False
+
+        for obstacle in game.obstacles:
+            if not self.rect.colliderect(obstacle.rect):
+                continue
+
+            # Check if this is a balloon obstacle that can be slid under
+            if hasattr(obstacle, "requires_slide") and obstacle.requires_slide:
+                # If we're sliding, we can pass under it
+                if self.is_sliding:
+                    continue
+
+            # Check if this is a glow balloon (power-up)
+            if obstacle.type == "glow_balloon":
+                self.double_jumps_available += 1
+                game.particle_system.add_particles(
+                    x=obstacle.rect.centerx,
+                    y=obstacle.rect.centery,
+                    count=25,
+                    color_range=[(255, 255), (200, 255), (0, 100)],  # Bright yellow
+                    speed_range=[(-2, 2), (-2, 2)],
+                    size_range=(4, 8),
+                    lifetime_range=(40, 70),
+                )
+                game.play_sound("powerup")
+                obstacle.kill()  # Remove the balloon power-up
+                return False
+
+            # Collision occurred with a harmful obstacle
+            self.die()
+            game.play_sound("hit")
+            game.game_over = True
+            return True
+
+        return False
 
 
 # Obstacle class
 class Obstacle(pygame.sprite.Sprite):
-    """Obstacles that the cat must jump over or avoid."""
+    """Obstacle sprites that the cat must avoid."""
 
     def __init__(self):
         super().__init__()
 
-        # Choose obstacle type with more naturalistic options
-        obstacle_types = ["stone", "cactus", "bush", "balloon", "glow_balloon"]
+        obstacle_types = [
+            {"type": "stone", "weight": 30},
+            {"type": "cactus", "weight": 25},
+            {"type": "bush", "weight": 20},
+            {"type": "balloon", "weight": 15},
+            {"type": "low_balloon", "weight": 10},  # New low-flying balloon type
+            {"type": "glow_balloon", "weight": 5},  # Keep the power-up balloon
+        ]
 
-        # Adjust probabilities: make balloon rarer, glow balloon even rarer
-        weights = [
-            0.3,
-            0.3,
-            0.25,
-            0.10,
-            0.05,
-        ]  # stone, cactus, bush, balloon, glow_balloon
-        obstacle_type = random.choices(obstacle_types, weights=weights, k=1)[0]
+        # Choose obstacle type based on weights
+        weights = [item["weight"] for item in obstacle_types]
+        self.type = random.choices(
+            [item["type"] for item in obstacle_types], weights=weights
+        )[0]
 
-        # Use the appropriate image based on type
-        if obstacle_type == "stone":
+        # Set up the obstacle based on type
+        if self.type == "stone":
             self._setup_stone_obstacle()
-        elif obstacle_type == "cactus":
+        elif self.type == "cactus":
             self._setup_cactus_obstacle()
-        elif obstacle_type == "bush":
+        elif self.type == "bush":
             self._setup_bush_obstacle()
-        elif obstacle_type == "balloon":
+        elif self.type == "balloon":
             self._setup_balloon_obstacle()
-        elif obstacle_type == "glow_balloon":
+        elif self.type == "low_balloon":
+            self._setup_low_balloon_obstacle()  # New setup for low balloon
+        elif self.type == "glow_balloon":
             self._setup_glow_balloon_obstacle()
-        else:
-            # Fallback to stone if something goes wrong
-            self._setup_stone_obstacle()
-            obstacle_type = "stone"
 
-        self.obstacle_type = obstacle_type
-
-        # Randomize speed slightly for more variety
-        self.speed = OBSTACLE_SPEED + random.uniform(-0.5, 0.5)
+        # Set common properties
+        self.speed = OBSTACLE_SPEED
         self.already_passed = False
+
+        # Ground-based obstacles position
+        if self.type not in ["balloon", "low_balloon", "glow_balloon"]:
+            self.rect.bottom = GROUND_LEVEL
+        # If it's a balloon, adjust y position to be in the air
+        elif self.type == "balloon":
+            # Standard balloon is high in the air
+            self.rect.y = GROUND_LEVEL - self.rect.height - random.randint(200, 250)
+        elif self.type == "low_balloon":
+            # Low balloon requires sliding under it
+            self.rect.y = GROUND_LEVEL - self.rect.height - random.randint(70, 120)
+        elif self.type == "glow_balloon":
+            # Glow balloon should be in jumping range
+            self.rect.y = GROUND_LEVEL - self.rect.height - random.randint(150, 180)
 
     def _setup_stone_obstacle(self):
         """Setup a stone obstacle."""
@@ -1788,6 +1864,18 @@ class Obstacle(pygame.sprite.Sprite):
         # Position slightly higher than normal balloons, but still reachable
         balloon_height = random.randint(100, 160)
         self.rect.bottomleft = (WIDTH, GROUND_LEVEL - balloon_height)
+
+    def _setup_low_balloon_obstacle(self):
+        """Set up a low-flying balloon obstacle that requires sliding under."""
+        # Use the same balloon image but position it lower
+        self.image = create_pixel_balloon(random_variant=True)
+        self.rect = self.image.get_rect()
+
+        # Set position at right edge of screen
+        self.rect.x = SCREEN_SIZE[0]
+
+        # Tag this as a slide-under obstacle
+        self.requires_slide = True
 
     def update(self):
         """Move the obstacle and check if it's off-screen."""
@@ -2059,6 +2147,29 @@ class Ground:
         """Draw the ground on the screen."""
         screen.blit(self.surface, self.rect)
 
+    def update_theme(self, new_style):
+        """Update the ground theme based on the new background style."""
+        if new_style == "Blue Sky":
+            self.dark_grass = (25, 80, 20)
+            self.main_grass = (40, 120, 30)
+            self.light_grass = (65, 150, 45)
+            self.dirt_color = (101, 67, 33)
+        elif new_style == "Sunset":
+            self.dark_grass = (80, 40, 60)
+            self.main_grass = (100, 60, 80)
+            self.light_grass = (139, 69, 19)
+            self.dirt_color = (160, 100, 80)
+        elif new_style == "Night":
+            self.dark_grass = (20, 30, 50)
+            self.main_grass = (25, 35, 60)
+            self.light_grass = (40, 50, 80)
+            self.dirt_color = (50, 70, 160)
+        elif new_style == "Dawn":
+            self.dark_grass = (200, 120, 150)
+            self.main_grass = (220, 160, 180)
+            self.light_grass = (240, 180, 210)
+            self.dirt_color = (180, 150, 180)
+
 
 class LightingEffect:
     """Creates a dynamic lighting effect for the game."""
@@ -2190,13 +2301,9 @@ class Game:
             logger.error(f"Error saving high score: {e}")
 
     def _load_sounds(self):
-        """Load game sound effects."""
+        """Load all game sound effects."""
         self.sounds = {}
         try:
-            # Create a sounds directory if it doesn't exist
-            if not os.path.exists("assets/sounds"):
-                os.makedirs("assets/sounds")
-
             # We'll implement actual sound loading when we have sound files
             # For now, we'll just set up the structure
             self.sounds_enabled = True
@@ -2213,6 +2320,7 @@ class Game:
         self.sounds["hit"] = None  # Assume hit sound exists
         self.sounds["point"] = None  # Assume point sound exists
         self.sounds["bonus"] = None  # Assume bonus sound exists
+        self.sounds["slide"] = None  # Add slide sound
 
     def play_sound(self, sound_name):
         """Play a sound effect if sounds are enabled and the sound exists."""
@@ -2302,41 +2410,7 @@ class Game:
 
     def check_collisions(self):
         """Check if the cat has collided with any obstacles."""
-        if not self.cat.is_dead:
-            for obstacle in self.obstacles:
-                if self.cat.rect.colliderect(obstacle.rect):
-                    # Special handling for balloon - only die if the cat is jumping
-                    if obstacle.obstacle_type == "balloon":
-                        if not self.cat.on_ground:  # Cat is jumping and hit balloon
-                            self.game_over = True
-                            self.cat.die()
-                            self.play_sound("hit")
-                    # Special handling for glowing balloon - gain double jump
-                    elif obstacle.obstacle_type == "glow_balloon":
-                        self.cat.double_jumps_available += 1
-                        # Add visual/audio feedback for power-up
-                        # Define particle properties for clarity
-                        powerup_colors = [  # Bright yellow particles
-                            (255, 255),
-                            (200, 255),
-                            (0, 100),
-                        ]
-                        self.particle_system.add_particles(
-                            x=obstacle.rect.centerx,
-                            y=obstacle.rect.centery,
-                            count=25,
-                            color_range=powerup_colors,
-                            speed_range=[(-2, 2), (-2, 2)],
-                            size_range=(4, 8),
-                            lifetime_range=(40, 70),
-                        )
-                        self.play_sound("powerup")
-                        obstacle.kill()  # Remove the balloon power-up
-                    else:
-                        # For all other obstacles, die on collision
-                        self.game_over = True
-                        self.cat.die()
-                        self.play_sound("hit")
+        return self.cat.check_collisions()
 
     def update_score(self):
         """Update the score when obstacles are passed."""
@@ -2346,7 +2420,7 @@ class Game:
                 score_to_add = 1
 
                 # Give bonus points for balloon obstacles as they're harder to avoid
-                if obstacle.obstacle_type == "balloon":
+                if obstacle.type == "balloon":
                     score_to_add = 2
                     self.combo_counter += 1
 
@@ -2520,13 +2594,25 @@ class Game:
                 if event.type == pygame.KEYDOWN:
                     if self.show_splash:
                         self.show_splash = False
-                    elif event.key == pygame.K_SPACE and not self.game_over:
+                    elif event.key == pygame.K_ESCAPE:
+                        running = False
+                    elif (
+                        event.key == pygame.K_UP and not self.game_over
+                    ):  # Up arrow for jump
                         self.cat.jump()
                         self.play_sound("jump")
+                    elif (
+                        event.key == pygame.K_DOWN and not self.game_over
+                    ):  # Down arrow for slide
+                        self.cat.slide()
                     elif event.key == pygame.K_r and self.game_over:
                         self.reset()
                     elif event.key == pygame.K_m:  # Mute toggle
                         self.sounds_enabled = not self.sounds_enabled
+                    elif event.key == pygame.K_b:  # Background cycle
+                        new_style = self.background.cycle_background()
+                        # Change the ground to match
+                        self.ground.update_theme(new_style)
 
             if not self.game_over and not self.show_splash:
                 # Spawn obstacles
