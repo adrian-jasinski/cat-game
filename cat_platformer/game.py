@@ -1784,6 +1784,15 @@ class Cat(pygame.sprite.Sprite):
 class Obstacle(pygame.sprite.Sprite):
     """Obstacle sprites that the cat must avoid."""
 
+    # Class variable to track the last few obstacle types to avoid repetition
+    _last_obstacles = []
+    _max_history = 3  # Remember the last 3 obstacles
+
+    @classmethod
+    def reset_history(cls):
+        """Reset obstacle history to prevent exploits."""
+        cls._last_obstacles = []
+
     def __init__(self):
         super().__init__()
 
@@ -1798,9 +1807,23 @@ class Obstacle(pygame.sprite.Sprite):
 
         # Choose obstacle type based on weights
         weights = [item["weight"] for item in obstacle_types]
+
+        # Try to avoid repeating the same obstacle multiple times in a row
+        # by adjusting weights based on recent history
+        adjusted_weights = weights.copy()
+        for i, item in enumerate(obstacle_types):
+            if item["type"] in Obstacle._last_obstacles:
+                # Reduce weight of recently seen obstacles
+                adjusted_weights[i] = max(1, weights[i] // 2)
+
         self.type = random.choices(
-            [item["type"] for item in obstacle_types], weights=weights
+            [item["type"] for item in obstacle_types], weights=adjusted_weights
         )[0]
+
+        # Update the history of obstacle types
+        Obstacle._last_obstacles.append(self.type)
+        if len(Obstacle._last_obstacles) > Obstacle._max_history:
+            Obstacle._last_obstacles.pop(0)  # Remove oldest obstacle type
 
         # Set up the obstacle based on type
         if self.type == "stone":
@@ -2669,6 +2692,15 @@ class Game:
                         new_style = self.background.cycle_background()
                         # Change the ground to match
                         self.ground.update_theme(new_style)
+
+                        # Reset random seed for obstacle generation to prevent exploit
+                        # This ensures pressing B repeatedly doesn't result in the same obstacles
+                        # We'll use a mix of current time and score to create a unique seed
+                        new_seed = int(pygame.time.get_ticks() * (self.score + 1))
+                        random.seed(new_seed)
+
+                        # Reset obstacle history tracking to prevent pattern exploitation
+                        Obstacle.reset_history()
 
             if not self.game_over and not self.show_splash:
                 # Spawn obstacles
