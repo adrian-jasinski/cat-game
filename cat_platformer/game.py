@@ -1323,41 +1323,13 @@ def create_pixel_balloon(random_variant=False):
 
 
 def create_pixel_glow_balloon(random_variant=False):
-    """Creates a glowing balloon power-up obstacle."""
+    """Creates a glowing balloon power-up obstacle that changes colors."""
     # Start with a regular balloon
     balloon = create_pixel_balloon(random_variant=True)
-    balloon_width, balloon_height = balloon.get_width(), balloon.get_height()
 
-    # Create a new surface with the same size but with alpha channel
-    glowing_balloon = pygame.Surface((balloon_width, balloon_height), pygame.SRCALPHA)
-
-    # Copy the balloon to our new surface
-    glowing_balloon.blit(balloon, (0, 0))
-
-    # Add a bright glow effect
-    glow_color = (255, 255, 100, 150)  # Bright yellow with alpha
-
-    # Draw several expanding circles for the glow effect
-    for offset in range(1, 5):
-        glow_surface = pygame.Surface((balloon_width, balloon_height), pygame.SRCALPHA)
-        # Draw a circle at the center of the balloon
-        center_x, center_y = balloon_width // 2, balloon_height // 2
-
-        # Calculate the correct alpha for this layer of glow
-        # The further from the balloon, the more transparent
-        alpha = max(0, 150 - offset * 30)
-        current_glow = (glow_color[0], glow_color[1], glow_color[2], alpha)
-
-        # Draw the glow circle
-        radius = 20 + offset * 3  # Growing radius
-        pygame.draw.circle(glow_surface, current_glow, (center_x, center_y), radius)
-
-        # Add the glow to our balloon
-        glowing_balloon.blit(
-            glow_surface, (0, 0), special_flags=pygame.BLEND_ALPHA_SDL2
-        )
-
-    return glowing_balloon
+    # The color-changing functionality will be handled in update method
+    # Return the normal balloon without the glow sphere
+    return balloon
 
 
 def create_pixel_glowing_obstacle(random_variant=False):
@@ -1886,7 +1858,10 @@ class Obstacle(pygame.sprite.Sprite):
             {"type": "bush", "weight": 18},
             {"type": "balloon", "weight": 15},
             {"type": "low_balloon", "weight": 10},  # New low-flying balloon type
-            {"type": "glow_balloon", "weight": 5},  # Keep the power-up balloon
+            {
+                "type": "glow_balloon",
+                "weight": 15,
+            },  # Increased weight for easier testing
             {"type": "glowing_obstacle", "weight": 6},  # New glowing obstacle
         ]
 
@@ -2029,7 +2004,7 @@ class Obstacle(pygame.sprite.Sprite):
         self.rect.bottomleft = (WIDTH, GROUND_LEVEL - balloon_height)
 
     def _setup_glow_balloon_obstacle(self):
-        """Setup a glowing balloon power-up obstacle."""
+        """Setup a glowing balloon power-up obstacle that changes color."""
         if "glow_balloon" in OBSTACLE_IMAGES and OBSTACLE_IMAGES["glow_balloon"]:
             self.image = OBSTACLE_IMAGES["glow_balloon"].copy()
         else:
@@ -2042,9 +2017,101 @@ class Obstacle(pygame.sprite.Sprite):
         self.image = pygame.transform.scale(self.image, (target_width, target_height))
 
         self.rect = self.image.get_rect()
-        # Position slightly higher than normal balloons, but still reachable and lower than before
+        # Position slightly higher than normal balloons, but still reachable
         balloon_height = random.randint(80, 140)
         self.rect.bottomleft = (WIDTH, GROUND_LEVEL - balloon_height)
+
+        # Add attributes for color-changing effect
+        self.color_timer = 0
+        self.color_change_speed = 3  # Faster color changes (was 5)
+        self.base_colors = [
+            (255, 0, 0),  # Red
+            (255, 165, 0),  # Orange
+            (255, 255, 0),  # Yellow
+            (0, 255, 0),  # Green
+            (0, 0, 255),  # Blue
+            (128, 0, 128),  # Purple
+        ]
+        self.current_color_index = 0
+        # Store the original balloon for recoloring
+        self.original_balloon = self.image.copy()
+
+    def update(self):
+        """Move the obstacle and check if it's off-screen."""
+        self.rect.x -= self.speed
+
+        # Handle color changing for glowing obstacle
+        if self.type == "glowing_obstacle":
+            self.color_timer += 1
+            if self.color_timer >= self.color_change_speed:
+                self.color_timer = 0
+                self.current_color_index = (self.current_color_index + 1) % len(
+                    self.base_colors
+                )
+                self._update_glowing_obstacle_color()
+
+        # Handle color changing for glow balloon
+        elif self.type == "glow_balloon":
+            self.color_timer += 1
+            if self.color_timer >= self.color_change_speed:
+                self.color_timer = 0
+                self.current_color_index = (self.current_color_index + 1) % len(
+                    self.base_colors
+                )
+                self._update_glow_balloon_color()
+
+        # Remove if off-screen
+        if self.rect.right < 0:
+            self.kill()
+
+    def _update_glow_balloon_color(self):
+        """Update the color of the glowing balloon."""
+        if self.type != "glow_balloon":
+            return
+
+        new_color = self.base_colors[self.current_color_index]
+
+        # Create a new tinted version of the balloon
+        width, height = (
+            self.original_balloon.get_width(),
+            self.original_balloon.get_height(),
+        )
+        tinted_surface = pygame.Surface((width, height), pygame.SRCALPHA)
+
+        # Copy the original balloon
+        tinted_surface.blit(self.original_balloon, (0, 0))
+
+        # Create a colored overlay with some transparency for tinting
+        overlay = pygame.Surface((width, height), pygame.SRCALPHA)
+        overlay.fill(
+            (*new_color, 150)
+        )  # Increased opacity for stronger color effect (was 100)
+
+        # Apply the tint to the balloon
+        tinted_surface.blit(overlay, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+
+        # Add some bright spots to make it look like it's glowing
+        for _ in range(3):
+            spot_x = random.randint(width // 4, width * 3 // 4)
+            spot_y = random.randint(
+                height // 4, height * 3 // 5
+            )  # Mostly upper part (balloon)
+            spot_size = random.randint(2, 5)
+            spot_color = (255, 255, 255, 150)  # Semi-transparent white
+
+            spot_surface = pygame.Surface(
+                (spot_size * 2, spot_size * 2), pygame.SRCALPHA
+            )
+            pygame.draw.circle(
+                spot_surface, spot_color, (spot_size, spot_size), spot_size
+            )
+            tinted_surface.blit(
+                spot_surface,
+                (spot_x - spot_size, spot_y - spot_size),
+                special_flags=pygame.BLEND_RGBA_ADD,
+            )
+
+        self.image = tinted_surface
 
     def _setup_glowing_obstacle(self):
         """Setup a glowing obstacle that changes color and gives a shot when collected."""
@@ -2062,7 +2129,7 @@ class Obstacle(pygame.sprite.Sprite):
         # Add attributes specific to the glowing obstacle
         self.gives_shot = True  # This obstacle gives a shot when touched
         self.color_timer = 0
-        self.color_change_speed = 5  # How fast the color changes
+        self.color_change_speed = 3  # Faster color changes (was 5)
         self.base_colors = [
             (255, 0, 0),  # Red
             (255, 165, 0),  # Orange
@@ -2072,23 +2139,6 @@ class Obstacle(pygame.sprite.Sprite):
             (128, 0, 128),  # Purple
         ]
         self.current_color_index = 0
-
-    def update(self):
-        """Move the obstacle and check if it's off-screen."""
-        self.rect.x -= self.speed
-
-        # Special behavior for glowing obstacle - change color
-        if self.type == "glowing_obstacle":
-            self.color_timer += 1
-            if self.color_timer >= self.color_change_speed:
-                self.color_timer = 0
-                self.current_color_index = (self.current_color_index + 1) % len(
-                    self.base_colors
-                )
-                self._update_glowing_obstacle_color()
-
-        if self.rect.right < 0:
-            self.kill()
 
     def _update_glowing_obstacle_color(self):
         """Update the color of the glowing obstacle."""
