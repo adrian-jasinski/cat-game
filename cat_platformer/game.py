@@ -3,25 +3,27 @@ Cat Platformer Game Module
 This module contains the game mechanics for the Cat Platformer.
 """
 
-import os
-import sys
-import math
-import random
-import logging
 import pygame
 import glob
-from typing import Union
+import logging
+import math
+import os
+import random
+import sys
+from typing import List  # Only keep the types we're actually using
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("cat_platformer.game")
 
 # Initialize pygame
 pygame.init()
 try:
-    pygame.mixer.init()  # Initialize the mixer for sound
-except pygame.error:
-    logging.warning("Could not initialize sound mixer")
+    # Initialize the mixer for sound - handle potential attribute errors
+    if hasattr(pygame, "mixer"):
+        pygame.mixer.init()
+except Exception as e:
+    logging.warning(f"Could not initialize sound mixer: {e}")
 
 # Game constants
 SCREEN_SIZE = (800, 600)
@@ -55,7 +57,12 @@ YELLOW = (255, 255, 0)  # Yellow for bullet effects
 # Set up the display
 screen = pygame.display.set_mode(SCREEN_SIZE)
 pygame.display.set_caption("Cat Platformer")
-clock = pygame.time.Clock()  # Create clock instance for time tracking
+try:
+    # Create clock instance for time tracking
+    clock = pygame.time.Clock()
+except Exception as e:
+    logging.error(f"Error creating pygame clock: {e}")
+    clock = None  # Fallback if Clock is not available
 
 # Create game directory for assets if it doesn't exist
 if not os.path.exists("assets"):
@@ -1841,8 +1848,21 @@ class Obstacle(pygame.sprite.Sprite):
     """Obstacle sprites that the cat must avoid."""
 
     # Class variable to track the last few obstacle types to avoid repetition
-    _last_obstacles = []
+    _last_obstacles: List[str] = []  # Add type annotation
     _max_history = 3  # Remember the last 3 obstacles
+
+    # Predefined color palette for color-changing obstacles
+    COLOR_PALETTE = [
+        (255, 0, 0),  # Red
+        (255, 165, 0),  # Orange
+        (255, 255, 0),  # Yellow
+        (0, 255, 0),  # Green
+        (0, 0, 255),  # Blue
+        (128, 0, 128),  # Purple
+    ]
+
+    # Default color change speed (frames between changes)
+    DEFAULT_COLOR_CHANGE_SPEED = 3
 
     @classmethod
     def reset_history(cls):
@@ -1852,30 +1872,42 @@ class Obstacle(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
 
+        # Define obstacle types with their weights for random selection
         obstacle_types = [
             {"type": "stone", "weight": 28},
             {"type": "cactus", "weight": 23},
             {"type": "bush", "weight": 18},
             {"type": "balloon", "weight": 15},
-            {"type": "low_balloon", "weight": 10},  # New low-flying balloon type
+            {"type": "low_balloon", "weight": 10},  # Low-flying balloon type
             {
                 "type": "glow_balloon",
                 "weight": 15,
             },  # Increased weight for easier testing
-            {"type": "glowing_obstacle", "weight": 6},  # New glowing obstacle
+            {"type": "glowing_obstacle", "weight": 6},  # Glowing star obstacle
         ]
 
-        # Choose obstacle type based on weights
+        # Choose obstacle type based on weights, avoiding recent types
+        self._choose_obstacle_type(obstacle_types)
+
+        # Initialize obstacle properties
+        self._initialize_obstacle()
+
+        # Position the obstacle
+        self._position_obstacle()
+
+    def _choose_obstacle_type(self, obstacle_types):
+        """Choose obstacle type based on weights, avoiding recent types."""
+        # Extract weights for random selection
         weights = [item["weight"] for item in obstacle_types]
 
-        # Try to avoid repeating the same obstacle multiple times in a row
-        # by adjusting weights based on recent history
+        # Adjust weights to avoid repeating recent obstacles
         adjusted_weights = weights.copy()
         for i, item in enumerate(obstacle_types):
             if item["type"] in Obstacle._last_obstacles:
                 # Reduce weight of recently seen obstacles
                 adjusted_weights[i] = max(1, weights[i] // 2)
 
+        # Choose obstacle type based on adjusted weights
         self.type = random.choices(
             [item["type"] for item in obstacle_types], weights=adjusted_weights
         )[0]
@@ -1885,6 +1917,8 @@ class Obstacle(pygame.sprite.Sprite):
         if len(Obstacle._last_obstacles) > Obstacle._max_history:
             Obstacle._last_obstacles.pop(0)  # Remove oldest obstacle type
 
+    def _initialize_obstacle(self):
+        """Initialize the obstacle based on its type."""
         # Set up the obstacle based on type
         if self.type == "stone":
             self._setup_stone_obstacle()
@@ -1895,7 +1929,7 @@ class Obstacle(pygame.sprite.Sprite):
         elif self.type == "balloon":
             self._setup_balloon_obstacle()
         elif self.type == "low_balloon":
-            self._setup_low_balloon_obstacle()  # New setup for low balloon
+            self._setup_low_balloon_obstacle()
         elif self.type == "glow_balloon":
             self._setup_glow_balloon_obstacle()
         elif self.type == "glowing_obstacle":
@@ -1905,7 +1939,9 @@ class Obstacle(pygame.sprite.Sprite):
         self.speed = OBSTACLE_SPEED
         self.already_passed = False
 
-        # Position obstacles
+    def _position_obstacle(self):
+        """Position the obstacle based on its type."""
+        # Position the obstacle off-screen to the right
         self.rect.x = SCREEN_SIZE[0]
 
         # Set vertical position based on type
@@ -1915,18 +1951,19 @@ class Obstacle(pygame.sprite.Sprite):
             "glow_balloon",
             "glowing_obstacle",
         ]:
+            # Ground-based obstacles
             self.rect.bottom = GROUND_LEVEL
         elif self.type == "balloon":
-            # Standard balloon is now closer to the ground
+            # Standard balloon is closer to the ground
             self.rect.y = GROUND_LEVEL - self.rect.height - random.randint(100, 180)
         elif self.type == "low_balloon":
             # Low balloon requires sliding under it - keep very low
             self.rect.y = GROUND_LEVEL - self.rect.height - random.randint(50, 90)
         elif self.type == "glow_balloon":
-            # Glow balloon should be in jumping range - slightly higher than regular balloons
+            # Glow balloon is in jumping range - slightly higher than regular balloons
             self.rect.y = GROUND_LEVEL - self.rect.height - random.randint(120, 160)
         elif self.type == "glowing_obstacle":
-            # Glowing obstacle should be in the middle range - can be jumped over or slid under
+            # Glowing obstacle in middle range - can be jumped over or slid under
             self.rect.y = GROUND_LEVEL - self.rect.height - random.randint(90, 130)
 
     def _setup_low_balloon_obstacle(self):
@@ -2023,95 +2060,12 @@ class Obstacle(pygame.sprite.Sprite):
 
         # Add attributes for color-changing effect
         self.color_timer = 0
-        self.color_change_speed = 3  # Faster color changes (was 5)
-        self.base_colors = [
-            (255, 0, 0),  # Red
-            (255, 165, 0),  # Orange
-            (255, 255, 0),  # Yellow
-            (0, 255, 0),  # Green
-            (0, 0, 255),  # Blue
-            (128, 0, 128),  # Purple
-        ]
+        self.color_change_speed = (
+            self.DEFAULT_COLOR_CHANGE_SPEED
+        )  # How fast the color changes
         self.current_color_index = 0
         # Store the original balloon for recoloring
         self.original_balloon = self.image.copy()
-
-    def update(self):
-        """Move the obstacle and check if it's off-screen."""
-        self.rect.x -= self.speed
-
-        # Handle color changing for glowing obstacle
-        if self.type == "glowing_obstacle":
-            self.color_timer += 1
-            if self.color_timer >= self.color_change_speed:
-                self.color_timer = 0
-                self.current_color_index = (self.current_color_index + 1) % len(
-                    self.base_colors
-                )
-                self._update_glowing_obstacle_color()
-
-        # Handle color changing for glow balloon
-        elif self.type == "glow_balloon":
-            self.color_timer += 1
-            if self.color_timer >= self.color_change_speed:
-                self.color_timer = 0
-                self.current_color_index = (self.current_color_index + 1) % len(
-                    self.base_colors
-                )
-                self._update_glow_balloon_color()
-
-        # Remove if off-screen
-        if self.rect.right < 0:
-            self.kill()
-
-    def _update_glow_balloon_color(self):
-        """Update the color of the glowing balloon."""
-        if self.type != "glow_balloon":
-            return
-
-        new_color = self.base_colors[self.current_color_index]
-
-        # Create a new tinted version of the balloon
-        width, height = (
-            self.original_balloon.get_width(),
-            self.original_balloon.get_height(),
-        )
-        tinted_surface = pygame.Surface((width, height), pygame.SRCALPHA)
-
-        # Copy the original balloon
-        tinted_surface.blit(self.original_balloon, (0, 0))
-
-        # Create a colored overlay with some transparency for tinting
-        overlay = pygame.Surface((width, height), pygame.SRCALPHA)
-        overlay.fill(
-            (*new_color, 150)
-        )  # Increased opacity for stronger color effect (was 100)
-
-        # Apply the tint to the balloon
-        tinted_surface.blit(overlay, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-
-        # Add some bright spots to make it look like it's glowing
-        for _ in range(3):
-            spot_x = random.randint(width // 4, width * 3 // 4)
-            spot_y = random.randint(
-                height // 4, height * 3 // 5
-            )  # Mostly upper part (balloon)
-            spot_size = random.randint(2, 5)
-            spot_color = (255, 255, 255, 150)  # Semi-transparent white
-
-            spot_surface = pygame.Surface(
-                (spot_size * 2, spot_size * 2), pygame.SRCALPHA
-            )
-            pygame.draw.circle(
-                spot_surface, spot_color, (spot_size, spot_size), spot_size
-            )
-            tinted_surface.blit(
-                spot_surface,
-                (spot_x - spot_size, spot_y - spot_size),
-                special_flags=pygame.BLEND_RGBA_ADD,
-            )
-
-        self.image = tinted_surface
 
     def _setup_glowing_obstacle(self):
         """Setup a glowing obstacle that changes color and gives a shot when collected."""
@@ -2129,23 +2083,110 @@ class Obstacle(pygame.sprite.Sprite):
         # Add attributes specific to the glowing obstacle
         self.gives_shot = True  # This obstacle gives a shot when touched
         self.color_timer = 0
-        self.color_change_speed = 3  # Faster color changes (was 5)
-        self.base_colors = [
-            (255, 0, 0),  # Red
-            (255, 165, 0),  # Orange
-            (255, 255, 0),  # Yellow
-            (0, 255, 0),  # Green
-            (0, 0, 255),  # Blue
-            (128, 0, 128),  # Purple
-        ]
+        self.color_change_speed = (
+            self.DEFAULT_COLOR_CHANGE_SPEED
+        )  # How fast the color changes
         self.current_color_index = 0
+
+    def update(self):
+        """Move the obstacle and check if it's off-screen."""
+        # Move obstacle to the left
+        self.rect.x -= self.speed
+
+        # Handle color changing effects
+        self._update_color_effects()
+
+        # Remove if off-screen
+        if self.rect.right < 0:
+            self.kill()
+
+    def _update_color_effects(self):
+        """Handle color changing effects for special obstacles."""
+        # Only process color changes for special obstacle types
+        if self.type not in ["glowing_obstacle", "glow_balloon"]:
+            return
+
+        # Update color timer
+        self.color_timer += 1
+        if self.color_timer >= self.color_change_speed:
+            # Reset timer and advance to next color
+            self.color_timer = 0
+            self.current_color_index = (self.current_color_index + 1) % len(
+                self.COLOR_PALETTE
+            )
+
+            # Update the appearance based on obstacle type
+            if self.type == "glowing_obstacle":
+                self._update_glowing_obstacle_color()
+            elif self.type == "glow_balloon":
+                self._update_glow_balloon_color()
+
+    def _update_glow_balloon_color(self):
+        """Update the color of the glowing balloon."""
+        if self.type != "glow_balloon":
+            return
+
+        # Get the current color from the palette
+        new_color = self.COLOR_PALETTE[self.current_color_index]
+
+        # Create a new tinted version of the balloon
+        width, height = (
+            self.original_balloon.get_width(),
+            self.original_balloon.get_height(),
+        )
+        tinted_surface = pygame.Surface((width, height), pygame.SRCALPHA)
+
+        # Copy the original balloon
+        tinted_surface.blit(self.original_balloon, (0, 0))
+
+        # Create a colored overlay with some transparency for tinting
+        overlay = pygame.Surface((width, height), pygame.SRCALPHA)
+        overlay.fill((*new_color, 150))  # Semi-transparent color overlay
+
+        # Apply the tint to the balloon
+        tinted_surface.blit(overlay, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+
+        # Add some bright spots to make it look like it's glowing
+        self._add_glow_spots(tinted_surface, width, height)
+
+        # Update the image
+        self.image = tinted_surface
+
+    def _add_glow_spots(self, surface, width, height):
+        """Add glowing spots to a surface to enhance the glow effect."""
+        for _ in range(3):
+            # Random position for the glow spot
+            spot_x = random.randint(width // 4, width * 3 // 4)
+            spot_y = random.randint(height // 4, height * 3 // 5)  # Mostly upper part
+
+            # Random size for the glow spot
+            spot_size = random.randint(2, 5)
+
+            # Semi-transparent white for the glow effect
+            spot_color = (255, 255, 255, 150)
+
+            # Create the glow spot
+            spot_surface = pygame.Surface(
+                (spot_size * 2, spot_size * 2), pygame.SRCALPHA
+            )
+            pygame.draw.circle(
+                spot_surface, spot_color, (spot_size, spot_size), spot_size
+            )
+
+            # Add the glow spot to the surface with additive blending
+            surface.blit(
+                spot_surface,
+                (spot_x - spot_size, spot_y - spot_size),
+                special_flags=pygame.BLEND_RGBA_ADD,
+            )
 
     def _update_glowing_obstacle_color(self):
         """Update the color of the glowing obstacle."""
         if self.type != "glowing_obstacle":
             return
 
-        new_color = self.base_colors[self.current_color_index]
+        # Get the current color from the palette
+        new_color = self.COLOR_PALETTE[self.current_color_index]
 
         # Create a new surface with the updated color
         width, height = self.image.get_width(), self.image.get_height()
@@ -2156,6 +2197,7 @@ class Obstacle(pygame.sprite.Sprite):
         outer_radius = width // 2 - 2
         inner_radius = outer_radius // 2
 
+        # Build the star shape points
         star_points = []
         for i in range(10):  # 5 points with 10 vertices
             angle = math.pi / 2 + i * math.pi * 2 / 10
@@ -2164,7 +2206,7 @@ class Obstacle(pygame.sprite.Sprite):
             y_point = center[1] - radius * math.sin(angle)
             star_points.append((x_point, y_point))
 
-        # Draw with new color
+        # Draw the star with the new color
         pygame.draw.polygon(surface, new_color, star_points)
 
         # Add a glow effect
@@ -2173,10 +2215,12 @@ class Obstacle(pygame.sprite.Sprite):
             # Make the glow match the current color
             glow_color = (*new_color, 100 - r * 25)
             pygame.draw.polygon(glow_surface, glow_color, star_points)
+
             # Scale the glow slightly larger
             scale_factor = 1.0 + (r * 0.1)
             scaled_size = (int(width * scale_factor), int(height * scale_factor))
             scaled_surface = pygame.transform.scale(glow_surface, scaled_size)
+
             # Center the scaled surface
             pos = ((width - scaled_size[0]) // 2, (height - scaled_size[1]) // 2)
             surface.blit(scaled_surface, pos, special_flags=pygame.BLEND_ALPHA_SDL2)
