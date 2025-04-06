@@ -1935,125 +1935,6 @@ class Obstacle(pygame.sprite.Sprite):
             self.kill()
 
 
-# Cloud class for background
-class Cloud(pygame.sprite.Sprite):
-    """Decorative blue clouds that move in the background."""
-
-    def __init__(self):
-        super().__init__()
-        self.width = random.randint(80, 180)  # Slightly wider clouds possible
-        self.height = random.randint(40, 80)  # Slightly taller clouds possible
-        self.image = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-
-        # Create varying shades of blue clouds - some darker, some lighter
-        base_alpha = 180  # Base transparency
-        cloud_base_color = random.choice(
-            [
-                (150, 170, 230, base_alpha),  # Light blue-purple
-                (130, 160, 220, base_alpha),  # Mid blue
-                (170, 200, 255, base_alpha),  # Very light blue
-                (100, 140, 210, base_alpha),  # Darker blue
-            ]
-        )
-
-        # Determine highlight color based on base color
-        highlight_color = (
-            min(cloud_base_color[0] + 30, 255),
-            min(cloud_base_color[1] + 30, 255),
-            min(cloud_base_color[2] + 30, 255),
-            base_alpha - 20,  # Slightly less transparent highlight
-        )
-
-        # Create a fluffier cloud shape using multiple overlapping circles
-        num_circles_main = random.randint(4, 7)  # Main large puffs
-        num_circles_detail = random.randint(3, 6)  # Smaller detail puffs
-        center_x = self.width // 2
-        center_y = self.height // 2
-
-        # Draw main puffs (larger, form the core shape)
-        for i in range(num_circles_main):
-            # Larger radius for main puffs
-            radius = random.randint(int(self.width * 0.20), int(self.width * 0.45))
-            # Wider horizontal offset, slightly lower vertical offset bias for base
-            offset_x = random.randint(-self.width // 3, self.width // 3)
-            offset_y = random.randint(
-                -self.height // 6, self.height // 4
-            )  # Bias slightly downwards
-
-            circle_x = center_x + offset_x
-            circle_y = center_y + offset_y
-
-            # Color based on vertical position (darker lower down)
-            # Calculate vertical position relative to the cloud height (0=top, 1=bottom)
-            # We use circle_y + radius as the bottom of the current circle for shading
-            effective_y = circle_y + radius
-            bottom_offset = effective_y - (center_y - self.height // 2)
-            vertical_ratio = max(0, min(1, bottom_offset / self.height))
-
-            r_base, g_base, b_base, a_base = cloud_base_color
-            r_high, g_high, b_high, a_high = highlight_color
-
-            # Interpolate between base and highlight based on height
-            mix_ratio = max(0, 1 - vertical_ratio * 1.2)
-            r = int(r_base + (r_high - r_base) * mix_ratio)
-            g = int(g_base + (g_high - g_base) * mix_ratio)
-            b = int(b_base + (b_high - b_base) * mix_ratio)
-            alpha = int(a_base + (a_high - a_base) * mix_ratio)
-
-            # Make bottom part darker explicitly
-            if vertical_ratio > 0.65:
-                r = max(0, r - 25)
-                g = max(0, g - 25)
-                b = max(0, b - 20)
-                alpha = min(255, alpha + 15)
-
-            color = (r, g, b, alpha)
-
-            pygame.draw.circle(
-                self.image,
-                color,
-                (circle_x, circle_y),
-                radius,
-            )
-
-        # Draw smaller detail puffs (add texture)
-        for i in range(num_circles_detail):
-            # Smaller radius for detail
-            radius = random.randint(int(self.width * 0.10), int(self.width * 0.25))
-            # Allow wider offset for detail puffs, slightly biased upwards
-            offset_x = random.randint(-self.width // 2, self.width // 2)
-            offset_y = random.randint(-self.height // 3, self.height // 4)
-
-            circle_x = center_x + offset_x
-            circle_y = center_y + offset_y
-
-            # Use highlight color mostly for detail puffs, slightly more transparent
-            detail_alpha = max(0, highlight_color[3] - 40)
-            color = (*highlight_color[:3], detail_alpha)
-
-            pygame.draw.circle(
-                self.image,
-                color,
-                (circle_x, circle_y),
-                radius,
-            )
-
-        self.rect = self.image.get_rect()
-        self.rect.x = random.randint(0, WIDTH)
-        self.rect.y = random.randint(
-            20, GROUND_LEVEL - 250
-        )  # Keep clouds higher in the sky
-        self.speed = random.uniform(0.3, 0.8)  # Slower cloud movement
-
-    def update(self):
-        """Move the cloud and wrap around when off-screen."""
-        self.rect.x -= self.speed
-        if self.rect.right < 0:
-            self.rect.left = WIDTH
-            self.rect.y = random.randint(20, GROUND_LEVEL - 250)
-            self.speed = random.uniform(0.3, 0.8)
-
-
 class Ground:
     """Ground platform for the game - green grass terrain."""
 
@@ -2275,7 +2156,6 @@ class Game:
         self.cat = Cat()
         self.all_sprites = pygame.sprite.Group(self.cat)
         self.obstacles = pygame.sprite.Group()
-        self.clouds = pygame.sprite.Group()
         self.bullets = pygame.sprite.Group()  # Group for bullets
 
         # Create splash screen cat
@@ -2294,12 +2174,6 @@ class Game:
 
         # Create particle system
         self.particle_system = ParticleSystem()
-
-        # Create initial clouds
-        for _ in range(5):
-            cloud = Cloud()
-            self.clouds.add(cloud)
-            self.all_sprites.add(cloud)
 
         # Create parallax background
         self.background = ParallaxBackground()
@@ -2825,9 +2699,6 @@ class Game:
                 self.bullets.update()
 
             elif self.show_splash:
-                # Only update clouds during splash screen
-                self.clouds.update()
-
                 # Update splash cat animation and position
                 self.splash_cat_state_timer += 1
 
@@ -2895,8 +2766,6 @@ class Game:
                     else:
                         self.splash_cat.image = current_frame
 
-                # Flipping now happens during the animation update
-
             elif self.game_over:
                 # When game over, still update the cat for death animation
                 self.cat.update()
@@ -2906,9 +2775,6 @@ class Game:
 
             # Draw parallax background
             self.background.draw(screen)
-
-            # Draw clouds
-            self.clouds.draw(screen)
 
             if self.show_splash:
                 self.draw_splash_screen()
