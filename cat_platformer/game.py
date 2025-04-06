@@ -94,6 +94,7 @@ class ParallaxBackground:
         """Change to the next background style."""
         self.current_style = (self.current_style + 1) % len(self.background_styles)
         self.background_styles[self.current_style]()
+        # Return the style index for other components to use
         return self.current_style
 
     def create_sunset_background_layers(self):
@@ -1522,6 +1523,7 @@ class Cat(pygame.sprite.Sprite):
 
         # Original rect height (for collision detection during sliding)
         self.normal_height = self.rect.height
+        self.normal_bottom = self.rect.bottom
 
         # Physics attributes
         self.velocity_y = 0
@@ -1533,54 +1535,8 @@ class Cat(pygame.sprite.Sprite):
         self.is_sliding = False
         self.slide_timer = 0
         self.slide_duration = 45  # Frames to stay in slide (about 0.75 seconds)
-        self.slide_cooldown = 0  # Cooldown between slides
+        self.slide_cooldown = 0
         self.slide_cooldown_duration = 30  # Frames of cooldown
-
-    def jump(self):
-        """Make the cat jump if it's on the ground or has a double jump available."""
-        if self.is_dead:
-            return
-
-        game_instance = Game.get_instance()
-
-        # Standard jump from ground
-        if self.on_ground:
-            if game_instance:
-                game_instance.particle_system.add_jump_particles(
-                    self.rect.centerx, self.rect.bottom
-                )
-                game_instance.play_sound("jump")  # Play regular jump sound
-
-            self.velocity_y = JUMP_FORCE
-            self.on_ground = False
-            self.current_animation = "jump"
-            self.frame_index = 0
-
-            # Cancel slide if jumping
-            self.is_sliding = False
-
-        # Double jump from air
-        elif self.double_jumps_available > 0:
-            self.double_jumps_available -= 1
-            self.velocity_y = JUMP_FORCE * 0.9  # Make double jump slightly weaker
-            self.current_animation = "jump"  # Restart jump animation
-            self.frame_index = 0
-            if game_instance:
-                # Add different particles/sound for double jump
-                game_instance.particle_system.add_particles(
-                    self.rect.centerx,
-                    self.rect.centery,
-                    count=10,
-                    color_range=[
-                        (220, 255),
-                        (180, 230),
-                        (50, 150),
-                    ],  # Yellow/Gold particles
-                    speed_range=[(-1.5, 1.5), (-1, -2.5)],
-                    size_range=(3, 6),
-                    lifetime_range=(15, 30),
-                )
-                game_instance.play_sound("double_jump")  # Play double jump sound
 
     def slide(self):
         """Make the cat slide if on the ground and not already sliding."""
@@ -1600,8 +1556,13 @@ class Cat(pygame.sprite.Sprite):
         self.current_animation = "slide"
         self.frame_index = 0
 
+        # Store original height
+        self.normal_height = self.rect.height
+        self.normal_bottom = self.rect.bottom
+
         # Adjust hitbox height to be lower when sliding
         self.rect.height = self.normal_height * 0.6
+        self.rect.bottom = self.normal_bottom  # Keep bottom position the same
 
         # Create slide dust effect
         if game_instance:
@@ -1727,6 +1688,54 @@ class Cat(pygame.sprite.Sprite):
 
         return False
 
+    def jump(self):
+        """Make the cat jump if it's on the ground or has a double jump available."""
+        if self.is_dead:
+            return
+
+        game_instance = Game.get_instance()
+
+        # Standard jump from ground
+        if self.on_ground:
+            if game_instance:
+                game_instance.particle_system.add_jump_particles(
+                    self.rect.centerx, self.rect.bottom
+                )
+                game_instance.play_sound("jump")  # Play regular jump sound
+
+            self.velocity_y = JUMP_FORCE
+            self.on_ground = False
+            self.current_animation = "jump"
+            self.frame_index = 0
+
+            # Cancel slide if jumping
+            self.is_sliding = False
+            self.rect.height = self.normal_height
+            self.rect.bottom = self.normal_bottom
+
+        # Double jump from air
+        elif self.double_jumps_available > 0:
+            self.double_jumps_available -= 1
+            self.velocity_y = JUMP_FORCE * 0.9  # Make double jump slightly weaker
+            self.current_animation = "jump"  # Restart jump animation
+            self.frame_index = 0
+            if game_instance:
+                # Add different particles/sound for double jump
+                game_instance.particle_system.add_particles(
+                    self.rect.centerx,
+                    self.rect.centery,
+                    count=10,
+                    color_range=[
+                        (220, 255),
+                        (180, 230),
+                        (50, 150),
+                    ],  # Yellow/Gold particles
+                    speed_range=[(-1.5, 1.5), (-1, -2.5)],
+                    size_range=(3, 6),
+                    lifetime_range=(15, 30),
+                )
+                game_instance.play_sound("double_jump")  # Play double jump sound
+
 
 # Obstacle class
 class Obstacle(pygame.sprite.Sprite):
@@ -1768,10 +1777,12 @@ class Obstacle(pygame.sprite.Sprite):
         self.speed = OBSTACLE_SPEED
         self.already_passed = False
 
-        # Ground-based obstacles position
+        # Position obstacles
+        self.rect.x = SCREEN_SIZE[0]
+
+        # Set vertical position based on type
         if self.type not in ["balloon", "low_balloon", "glow_balloon"]:
             self.rect.bottom = GROUND_LEVEL
-        # If it's a balloon, adjust y position to be in the air
         elif self.type == "balloon":
             # Standard balloon is high in the air
             self.rect.y = GROUND_LEVEL - self.rect.height - random.randint(200, 250)
@@ -1781,6 +1792,15 @@ class Obstacle(pygame.sprite.Sprite):
         elif self.type == "glow_balloon":
             # Glow balloon should be in jumping range
             self.rect.y = GROUND_LEVEL - self.rect.height - random.randint(150, 180)
+
+    def _setup_low_balloon_obstacle(self):
+        """Set up a low-flying balloon obstacle that requires sliding under."""
+        # Use the same balloon image but position it lower
+        self.image = create_pixel_balloon(random_variant=True)
+        self.rect = self.image.get_rect()
+
+        # Tag this as a slide-under obstacle
+        self.requires_slide = True
 
     def _setup_stone_obstacle(self):
         """Setup a stone obstacle."""
@@ -1864,18 +1884,6 @@ class Obstacle(pygame.sprite.Sprite):
         # Position slightly higher than normal balloons, but still reachable
         balloon_height = random.randint(100, 160)
         self.rect.bottomleft = (WIDTH, GROUND_LEVEL - balloon_height)
-
-    def _setup_low_balloon_obstacle(self):
-        """Set up a low-flying balloon obstacle that requires sliding under."""
-        # Use the same balloon image but position it lower
-        self.image = create_pixel_balloon(random_variant=True)
-        self.rect = self.image.get_rect()
-
-        # Set position at right edge of screen
-        self.rect.x = SCREEN_SIZE[0]
-
-        # Tag this as a slide-under obstacle
-        self.requires_slide = True
 
     def update(self):
         """Move the obstacle and check if it's off-screen."""
@@ -2147,28 +2155,32 @@ class Ground:
         """Draw the ground on the screen."""
         screen.blit(self.surface, self.rect)
 
-    def update_theme(self, new_style):
-        """Update the ground theme based on the new background style."""
-        if new_style == "Blue Sky":
+    def update_theme(self, style_index):
+        """Update the ground theme based on the background style index."""
+        # Update colors based on background style
+        if style_index == 0:  # Blue Sky
             self.dark_grass = (25, 80, 20)
             self.main_grass = (40, 120, 30)
             self.light_grass = (65, 150, 45)
             self.dirt_color = (101, 67, 33)
-        elif new_style == "Sunset":
+        elif style_index == 1:  # Sunset
             self.dark_grass = (80, 40, 60)
             self.main_grass = (100, 60, 80)
             self.light_grass = (139, 69, 19)
             self.dirt_color = (160, 100, 80)
-        elif new_style == "Night":
+        elif style_index == 2:  # Night
             self.dark_grass = (20, 30, 50)
             self.main_grass = (25, 35, 60)
             self.light_grass = (40, 50, 80)
             self.dirt_color = (50, 70, 160)
-        elif new_style == "Dawn":
+        elif style_index == 3:  # Dawn
             self.dark_grass = (200, 120, 150)
             self.main_grass = (220, 160, 180)
             self.light_grass = (240, 180, 210)
             self.dirt_color = (180, 150, 180)
+
+        # Regenerate the ground with new colors
+        self._generate_ground()
 
 
 class LightingEffect:
